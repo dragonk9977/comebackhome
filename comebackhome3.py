@@ -8,14 +8,8 @@ import os
 # ==========================================
 # 🔑 API 키 설정 (클라우드 배포용 안전 처리)
 # ==========================================
-try:
-    KAKAO_API_KEY = st.secrets["KAKAO_API_KEY"]
-    TMAP_APP_KEY = st.secrets["TMAP_APP_KEY"]
-except:
-    KAKAO_API_KEY = "96fc63ab0efc0a7d8591eeb8b34db8a9"
-    TMAP_APP_KEY = "kstcD6L0he3GU4SSTkWNF6IHGefkURVXak3qpabh"
-
-
+KAKAO_API_KEY = st.secrets["KAKAO_API_KEY"]
+TMAP_APP_KEY = st.secrets["TMAP_APP_KEY"]
 # ==========================================
 
 # --- 카카오 API 통신 ---
