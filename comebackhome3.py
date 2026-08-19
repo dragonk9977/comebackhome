@@ -268,30 +268,31 @@ if st.session_state.show_results:
     
     st.markdown("---")
     
-    # 🌟 지도 전체 화면 복구용 리프레시 버튼 
+    # 🌟 지도 새로고침 전용 세션(고유 Key) 생성
+    if "map_reset_key" not in st.session_state:
+        st.session_state.map_reset_key = 0
+
+    # 🌟 이 버튼을 누르면 고유 Key가 바뀌면서 지도가 완벽하게 새로 그려집니다!
     if st.button("🔄 지도 화면 원래대로 되돌리기 (경로 한눈에 보기)", use_container_width=True):
-        pass
+        st.session_state.map_reset_key += 1
     
     start_html = '<div style="background-color: #1E90FF; color: white; border-radius: 50%; width: 28px; height: 28px; display: flex; justify-content: center; align-items: center; font-weight: bold; border: 2px solid white; box-shadow: 1px 1px 3px rgba(0,0,0,0.4); font-size: 14px; font-family: Arial, sans-serif;">S</div>'
     end_html = '<div style="background-color: #FF0000; color: white; border-radius: 50%; width: 28px; height: 28px; display: flex; justify-content: center; align-items: center; font-weight: bold; border: 2px solid white; box-shadow: 1px 1px 3px rgba(0,0,0,0.4); font-size: 14px; font-family: Arial, sans-serif;">E</div>'
     
-    # 🌟 구글맵 타일 주소 설정 (hl=ko 옵션으로 한글 지명 표기)
     google_tiles = "https://mt1.google.com/vt/lyrs=m&hl=ko&x={x}&y={y}&z={z}"
     
     map_col1, map_col2 = st.columns(2)
     
-    # 🗺️ 카카오맵 그리기 (구글맵 배경)
     with map_col1:
         st.subheader("🗺️ 카카오내비 경로")
         k_segments = st.session_state.k_segments
         if k_segments:
             all_k_coords = [coord for seg in k_segments for coord in seg['coords']]
             
-            # 구글맵 타일 적용
+            # 🌟 scrollWheelZoom 옵션 제거 -> 휠로 자유롭게 확대/축소 가능!
             m1 = folium.Map(
                 location=all_k_coords[len(all_k_coords)//2], 
                 zoom_start=11, 
-                scrollWheelZoom=False,
                 tiles=google_tiles,
                 attr="Google Maps"
             )
@@ -303,20 +304,19 @@ if st.session_state.show_results:
                 folium.PolyLine(locations=seg['coords'], color=seg['color'], weight=6, opacity=0.9).add_to(m1)
             
             m1.fit_bounds(all_k_coords)
-            st_folium(m1, use_container_width=True, height=500, key="kakao_map")
+            # 🌟 고유 Key를 적용하여 버튼 누를 때마다 화면 갱신 강제 수행
+            st_folium(m1, use_container_width=True, height=500, key=f"kakao_map_{st.session_state.map_reset_key}")
             
-    # 🗺️ 티맵 그리기 (구글맵 배경)
     with map_col2:
         st.subheader("🗺️ 티맵 경로")
         t_segments = st.session_state.t_segments
         if t_segments:
             all_t_coords = [coord for seg in t_segments for coord in seg['coords']]
             
-            # 구글맵 타일 적용
+            # 🌟 scrollWheelZoom 옵션 제거 -> 휠로 자유롭게 확대/축소 가능!
             m2 = folium.Map(
                 location=all_t_coords[len(all_t_coords)//2], 
                 zoom_start=11, 
-                scrollWheelZoom=False,
                 tiles=google_tiles,
                 attr="Google Maps"
             )
@@ -328,4 +328,5 @@ if st.session_state.show_results:
                 folium.PolyLine(locations=seg['coords'], color=seg['color'], weight=6, opacity=0.9).add_to(m2)
                 
             m2.fit_bounds(all_t_coords)
-            st_folium(m2, use_container_width=True, height=500, key="tmap_map")
+            # 🌟 고유 Key를 적용하여 버튼 누를 때마다 화면 갱신 강제 수행
+            st_folium(m2, use_container_width=True, height=500, key=f"tmap_map_{st.session_state.map_reset_key}")
