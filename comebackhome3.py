@@ -5,6 +5,7 @@ from streamlit_folium import st_folium
 import base64
 import os
 import urllib.parse
+import datetime # 🌟 시간 감지를 위한 라이브러리 추가
 
 # ==========================================
 # 🔑 API 키 설정 (클라우드 배포용 안전 처리)
@@ -55,12 +56,12 @@ def get_kakao_route(start_x, start_y, end_x, end_y):
             for road in section.get('roads', []):
                 traffic_state = road.get('traffic_state', 0)
                 
-                # 카카오 교통상태: 1(정체), 2(지체), 3(서행), 4(원활)
-                if traffic_state == 1: color = "#FF0000"   
-                elif traffic_state == 2: color = "#FF8C00" 
-                elif traffic_state == 3: color = "#FFD700" 
-                elif traffic_state == 4: color = "#008000" 
-                else: color = "#1E90FF"                    
+                # 🌟 카카오 5단계 색상 완벽 매핑
+                if traffic_state == 1: color = "#FF0000"   # 1. 매우 정체 (빨강)
+                elif traffic_state == 2: color = "#FF8C00" # 2. 정체 (주황)
+                elif traffic_state == 3: color = "#FFD700" # 3. 보통 (노랑)
+                elif traffic_state == 4: color = "#1E90FF" # 4. 원활 (파랑)
+                else: color = "#008000"                    # 0. 매우 원활/기본 (초록)
 
                 vertexes = road.get('vertexes', [])
                 road_coords = []
@@ -76,7 +77,6 @@ def get_kakao_route(start_x, start_y, end_x, end_y):
 
 # --- 티맵 API 통신 ---
 def get_tmap_route(start_x, start_y, end_x, end_y):
-    # 🌟 수정 1: URL 끝에 trafficInfo=Y 를 직접 강제로 꽂아넣어서 API가 절대 무시하지 못하게 합니다.
     url = "https://apis.openapi.sk.com/tmap/routes?version=1&format=json&trafficInfo=Y"
     headers = {
         "appKey": TMAP_APP_KEY,
@@ -114,15 +114,14 @@ def get_tmap_route(start_x, start_y, end_x, end_y):
                 p = feature.get('properties', {})
                 
                 if geom.get('type') == 'LineString':
-                    # 🌟 수정 2: 티맵 서버가 문자로 던져줘도 에러가 안 나도록 강제로 숫자(int)로 묶어버립니다.
                     congestion = int(p.get('congestion', 0))
                     
-                    # 티맵 혼잡도: 4(정체), 3(지체), 2(서행), 1(원활)
-                    if congestion == 4: color = "#FF0000"   
-                    elif congestion == 3: color = "#FF8C00" 
-                    elif congestion == 2: color = "#FFD700" 
-                    elif congestion == 1: color = "#008000" 
-                    else: color = "#1E90FF"                 
+                    # 🌟 티맵 5단계 색상 완벽 매핑
+                    if congestion == 4: color = "#FF0000"   # 4. 매우 정체 (빨강)
+                    elif congestion == 3: color = "#FF8C00" # 3. 정체 (주황)
+                    elif congestion == 2: color = "#FFD700" # 2. 보통 (노랑)
+                    elif congestion == 1: color = "#1E90FF" # 1. 원활 (파랑)
+                    else: color = "#008000"                 # 0. 매우 원활/기본 (초록)
 
                     line_coords = []
                     for coord in geom.get('coordinates', []):
@@ -184,9 +183,17 @@ if work_address:
 
 st.markdown("---")
 
+# 🌟 현재 한국 시간을 기준으로 오전(출근) / 오후(퇴근) 자동 판단
+kst_now = datetime.datetime.utcnow() + datetime.timedelta(hours=9)
+current_hour = kst_now.hour
+
+# 0시~11시까지는 출근길(0), 12시~23시까지는 퇴근길(1) 기본 선택
+default_route_idx = 0 if current_hour < 12 else 1
+
 route_choice = st.radio(
     "🚗 조회할 경로 선택",
     ["1️⃣ 출근길 (집 ➔ 회사)", "2️⃣ 퇴근길 (회사 ➔ 집)", "3️⃣ 직접 설정"],
+    index=default_route_idx, # 자동으로 선택되게 적용
     horizontal=True
 )
 
@@ -244,7 +251,8 @@ if st.button("시간 비교 및 경로 보기", use_container_width=True):
 
 # --- 결과 화면 출력 ---
 if st.session_state.show_results:
-    st.markdown("💡 **교통 상황 색상 안내:** 🟢 원활 ｜ 🟡 서행 ｜ 🟠 지체 ｜ 🔴 정체")
+    # 안내 색상을 요청하신 5단계로 업데이트
+    st.markdown("💡 **교통 상황 색상 안내:** 🔴 매우 정체 ｜ 🟠 정체 ｜ 🟡 보통 ｜ 🔵 원활 ｜ 🟢 매우 원활")
     res = st.session_state.results
     end_name, e_x, e_y = res["end_info"]
     safe_end_name = urllib.parse.quote(end_name)
@@ -264,6 +272,10 @@ if st.session_state.show_results:
     
     st.markdown("---")
     
+    # 🌟 S/E 마커를 예쁘게 만들어주는 HTML 디자인 코드
+    start_html = '<div style="background-color: #1E90FF; color: white; border-radius: 50%; width: 28px; height: 28px; display: flex; justify-content: center; align-items: center; font-weight: bold; border: 2px solid white; box-shadow: 1px 1px 3px rgba(0,0,0,0.4); font-size: 14px; font-family: Arial, sans-serif;">S</div>'
+    end_html = '<div style="background-color: #FF0000; color: white; border-radius: 50%; width: 28px; height: 28px; display: flex; justify-content: center; align-items: center; font-weight: bold; border: 2px solid white; box-shadow: 1px 1px 3px rgba(0,0,0,0.4); font-size: 14px; font-family: Arial, sans-serif;">E</div>'
+    
     map_col1, map_col2 = st.columns(2)
     
     # 🗺️ 카카오맵 그리기
@@ -275,8 +287,9 @@ if st.session_state.show_results:
             mid_coord = k_segments[mid_idx]['coords'][0]
             m1 = folium.Map(location=mid_coord, zoom_start=11)
             
-            folium.Marker(k_segments[0]['coords'][0], popup="출발", icon=folium.Icon(color="blue", icon="play")).add_to(m1)
-            folium.Marker(k_segments[-1]['coords'][-1], popup="도착", icon=folium.Icon(color="red", icon="stop")).add_to(m1)
+            # 커스텀 S/E 마커 적용
+            folium.Marker(k_segments[0]['coords'][0], icon=folium.DivIcon(html=start_html, icon_anchor=(14, 14))).add_to(m1)
+            folium.Marker(k_segments[-1]['coords'][-1], icon=folium.DivIcon(html=end_html, icon_anchor=(14, 14))).add_to(m1)
             
             for seg in k_segments:
                 folium.PolyLine(locations=seg['coords'], color=seg['color'], weight=6, opacity=0.9).add_to(m1)
@@ -292,8 +305,9 @@ if st.session_state.show_results:
             mid_coord = t_segments[mid_idx]['coords'][0]
             m2 = folium.Map(location=mid_coord, zoom_start=11)
             
-            folium.Marker(t_segments[0]['coords'][0], popup="출발", icon=folium.Icon(color="blue", icon="play")).add_to(m2)
-            folium.Marker(t_segments[-1]['coords'][-1], popup="도착", icon=folium.Icon(color="red", icon="stop")).add_to(m2)
+            # 커스텀 S/E 마커 적용
+            folium.Marker(t_segments[0]['coords'][0], icon=folium.DivIcon(html=start_html, icon_anchor=(14, 14))).add_to(m2)
+            folium.Marker(t_segments[-1]['coords'][-1], icon=folium.DivIcon(html=end_html, icon_anchor=(14, 14))).add_to(m2)
             
             for seg in t_segments:
                 folium.PolyLine(locations=seg['coords'], color=seg['color'], weight=6, opacity=0.9).add_to(m2)
