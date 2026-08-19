@@ -8,7 +8,45 @@ import urllib.parse
 import datetime
 
 # ==========================================
-# 🔑 API 키 설정 (클라우드 배포용 안전 처리)
+# 🖥️ 웹 페이지 기본 설정 (가장 먼저 실행되어야 함)
+# ==========================================
+st.set_page_config(page_title="나만의 내비게이션 비교", page_icon="🚗", layout="wide")
+
+# ==========================================
+# 🎨 전체 폰트 및 카카오 스타일 버튼 CSS 디자인 적용
+# ==========================================
+custom_css = """
+<style>
+    /* 1. 전체 화면 프리텐다드(Pretendard) 폰트 적용 */
+    @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+    
+    html, body, [class*="css"]  {
+        font-family: 'Pretendard', sans-serif !important;
+    }
+
+    /* 2. '시간 비교 및 경로 보기' 메인 버튼 카카오 스타일 및 그림자 강조 */
+    div.stButton > button[kind="primary"] {
+        background-color: #FEE500 !important; /* 카카오 옐로우 */
+        color: #000000 !important;
+        font-weight: 800 !important;
+        font-size: 18px !important;
+        border: none !important;
+        border-radius: 10px !important;
+        padding: 10px 24px !important;
+        box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.25) !important; /* 그림자 효과 */
+        transition: all 0.2s ease-in-out !important;
+    }
+    
+    div.stButton > button[kind="primary"]:hover {
+        transform: translateY(-2px) !important; /* 마우스 올렸을 때 살짝 위로 */
+        box-shadow: 0px 6px 15px rgba(0, 0, 0, 0.35) !important;
+    }
+</style>
+"""
+st.markdown(custom_css, unsafe_allow_html=True)
+
+# ==========================================
+# 🔑 API 키 설정
 # ==========================================
 try:
     KAKAO_API_KEY = st.secrets["KAKAO_API_KEY"]
@@ -21,21 +59,17 @@ except:
 # --- 카카오 API 통신 ---
 def get_kakao_coords(address):
     headers = {"Authorization": f"KakaoAK {KAKAO_API_KEY}"}
-    
     keyword_url = "https://dapi.kakao.com/v2/local/search/keyword.json"
     res_keyword = requests.get(keyword_url, headers=headers, params={"query": address})
     data_keyword = res_keyword.json()
-    
     if data_keyword.get('documents'):
         return data_keyword['documents'][0]['x'], data_keyword['documents'][0]['y']
         
     addr_url = "https://dapi.kakao.com/v2/local/search/address.json"
     res_addr = requests.get(addr_url, headers=headers, params={"query": address})
     data_addr = res_addr.json()
-    
     if data_addr.get('documents'):
         return data_addr['documents'][0]['x'], data_addr['documents'][0]['y']
-        
     return None, None
 
 def get_kakao_route(start_x, start_y, end_x, end_y):
@@ -55,7 +89,6 @@ def get_kakao_route(start_x, start_y, end_x, end_y):
         for section in route.get('sections', []):
             for road in section.get('roads', []):
                 traffic_state = road.get('traffic_state', 0)
-                
                 if traffic_state == 1: color = "#FF0000"   
                 elif traffic_state == 2: color = "#FF8C00" 
                 elif traffic_state == 3: color = "#FFD700" 
@@ -66,7 +99,6 @@ def get_kakao_route(start_x, start_y, end_x, end_y):
                 road_coords = []
                 for i in range(0, len(vertexes), 2):
                     road_coords.append([vertexes[i+1], vertexes[i]])
-                    
                 if road_coords:
                     segments.append({"coords": road_coords, "color": color})
                     
@@ -82,23 +114,17 @@ def get_tmap_route(start_x, start_y, end_x, end_y):
         "Accept": "application/json",
         "Content-Type": "application/json"
     }
-    
     payload = {
-        "startX": str(start_x), 
-        "startY": str(start_y), 
-        "endX": str(end_x), 
-        "endY": str(end_y),
-        "startName": "출발지", 
-        "endName": "도착지",   
-        "reqCoordType": "WGS84GEO", 
-        "resCoordType": "WGS84GEO",
+        "startX": str(start_x), "startY": str(start_y), 
+        "endX": str(end_x), "endY": str(end_y),
+        "startName": "출발지", "endName": "도착지",   
+        "reqCoordType": "WGS84GEO", "resCoordType": "WGS84GEO",
         "searchOption": "0"
     }
     
     try:
         res = requests.post(url, headers=headers, json=payload)
         data = res.json()
-        
         if 'features' in data:
             prop = data['features'][0]['properties']
             distance_km = round(prop['totalDistance'] / 1000, 1)
@@ -106,26 +132,20 @@ def get_tmap_route(start_x, start_y, end_x, end_y):
             
             segments = []
             guides = []
-            
             for feature in data['features']:
                 geom = feature.get('geometry', {})
                 p = feature.get('properties', {})
-                
                 if geom.get('type') == 'LineString':
                     line_coords = []
                     for coord in geom.get('coordinates', []):
                         line_coords.append([coord[1], coord[0]])
-                        
                     if line_coords:
                         segments.append({"coords": line_coords, "color": "#1E90FF"})
-                
                 if geom.get('type') == 'Point' and 'description' in p:
                     guides.append(p['description'])
-                    
             return distance_km, duration_min, segments, guides
         else:
             return None, None, [], []
-            
     except Exception as e:
         print(f"🔴 티맵 통신 실패: {e}")
         return None, None, [], []
@@ -136,15 +156,27 @@ def format_time(duration_min):
     return f"{hours}시간 {mins}분" if hours > 0 else f"{mins}분"
 
 # ==========================================
-# 🖥️ 웹 페이지 화면 구성
+# 🖥️ 사이드바 & 커스텀 자동차 이미지 로직
 # ==========================================
-st.set_page_config(page_title="나만의 내비게이션 비교", page_icon="🚗", layout="wide")
+with st.sidebar:
+    st.markdown("### 🚘 내 차 이미지 설정")
+    st.write("나만의 자동차 사진을 올려 앱을 꾸며보세요!")
+    uploaded_img = st.file_uploader("", type=["jpg", "jpeg", "png"])
 
-image_path = "mycar.jpg" 
-if os.path.exists(image_path):
-    with open(image_path, "rb") as f:
-        img_data = f.read()
-        b64_encoded = base64.b64encode(img_data).decode()
+b64_encoded = ""
+if uploaded_img is not None:
+    # 🌟 사용자가 업로드한 이미지가 있으면 그걸 사용
+    img_data = uploaded_img.read()
+    b64_encoded = base64.b64encode(img_data).decode()
+else:
+    # 🌟 없으면 기존에 있던 mycar.jpg 사용
+    image_path = "mycar.jpg" 
+    if os.path.exists(image_path):
+        with open(image_path, "rb") as f:
+            img_data = f.read()
+            b64_encoded = base64.b64encode(img_data).decode()
+
+if b64_encoded:
     html_title = f"""
     <div style="display: flex; align-items: center; margin-bottom: 20px;">
         <img src="data:image/jpeg;base64,{b64_encoded}" style="width: 70px; height: 70px; border-radius: 15px; object-fit: cover; margin-right: 15px; box-shadow: 2px 2px 5px rgba(0,0,0,0.2);">
@@ -155,6 +187,9 @@ if os.path.exists(image_path):
 else:
     st.title("🚗 나만의 실시간 길찾기 비교")
 
+# ==========================================
+# 🖥️ 메인 화면 구성
+# ==========================================
 saved_home = st.query_params.get("home", "")
 saved_work = st.query_params.get("work", "")
 
@@ -209,7 +244,8 @@ else:
 if "last_route_choice" not in st.session_state:
     st.session_state.last_route_choice = None
 
-do_search = st.button("시간 비교 및 경로 보기", use_container_width=True)
+# 🌟 type="primary"를 추가하여 버튼을 카카오 노란색 + 그림자로 강조!
+do_search = st.button("시간 비교 및 경로 보기", use_container_width=True, type="primary")
 
 if st.session_state.last_route_choice != route_choice:
     st.session_state.last_route_choice = route_choice
@@ -268,11 +304,10 @@ if st.session_state.show_results:
     
     st.markdown("---")
     
-    # 🌟 지도 새로고침 전용 세션(고유 Key) 생성
     if "map_reset_key" not in st.session_state:
         st.session_state.map_reset_key = 0
 
-    # 🌟 이 버튼을 누르면 고유 Key가 바뀌면서 지도가 완벽하게 새로 그려집니다!
+    # 🌟 이 버튼은 카카오 옐로우 스타일이 적용되지 않도록 type="secondary"(기본값) 사용
     if st.button("🔄 지도 화면 원래대로 되돌리기 (경로 한눈에 보기)", use_container_width=True):
         st.session_state.map_reset_key += 1
     
@@ -288,14 +323,7 @@ if st.session_state.show_results:
         k_segments = st.session_state.k_segments
         if k_segments:
             all_k_coords = [coord for seg in k_segments for coord in seg['coords']]
-            
-            # 🌟 scrollWheelZoom 옵션 제거 -> 휠로 자유롭게 확대/축소 가능!
-            m1 = folium.Map(
-                location=all_k_coords[len(all_k_coords)//2], 
-                zoom_start=11, 
-                tiles=google_tiles,
-                attr="Google Maps"
-            )
+            m1 = folium.Map(location=all_k_coords[len(all_k_coords)//2], zoom_start=11, tiles=google_tiles, attr="Google Maps")
             
             folium.Marker(all_k_coords[0], icon=folium.DivIcon(html=start_html, icon_anchor=(14, 14))).add_to(m1)
             folium.Marker(all_k_coords[-1], icon=folium.DivIcon(html=end_html, icon_anchor=(14, 14))).add_to(m1)
@@ -304,7 +332,6 @@ if st.session_state.show_results:
                 folium.PolyLine(locations=seg['coords'], color=seg['color'], weight=6, opacity=0.9).add_to(m1)
             
             m1.fit_bounds(all_k_coords)
-            # 🌟 고유 Key를 적용하여 버튼 누를 때마다 화면 갱신 강제 수행
             st_folium(m1, use_container_width=True, height=500, key=f"kakao_map_{st.session_state.map_reset_key}")
             
     with map_col2:
@@ -312,14 +339,7 @@ if st.session_state.show_results:
         t_segments = st.session_state.t_segments
         if t_segments:
             all_t_coords = [coord for seg in t_segments for coord in seg['coords']]
-            
-            # 🌟 scrollWheelZoom 옵션 제거 -> 휠로 자유롭게 확대/축소 가능!
-            m2 = folium.Map(
-                location=all_t_coords[len(all_t_coords)//2], 
-                zoom_start=11, 
-                tiles=google_tiles,
-                attr="Google Maps"
-            )
+            m2 = folium.Map(location=all_t_coords[len(all_t_coords)//2], zoom_start=11, tiles=google_tiles, attr="Google Maps")
             
             folium.Marker(all_t_coords[0], icon=folium.DivIcon(html=start_html, icon_anchor=(14, 14))).add_to(m2)
             folium.Marker(all_t_coords[-1], icon=folium.DivIcon(html=end_html, icon_anchor=(14, 14))).add_to(m2)
@@ -328,5 +348,4 @@ if st.session_state.show_results:
                 folium.PolyLine(locations=seg['coords'], color=seg['color'], weight=6, opacity=0.9).add_to(m2)
                 
             m2.fit_bounds(all_t_coords)
-            # 🌟 고유 Key를 적용하여 버튼 누를 때마다 화면 갱신 강제 수행
             st_folium(m2, use_container_width=True, height=500, key=f"tmap_map_{st.session_state.map_reset_key}")
