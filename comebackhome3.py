@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import folium
+from folium.plugins import EasyButton # 🌟 지도 새로고침 버튼을 위한 라이브러리 추가
 from streamlit_folium import st_folium
 import base64
 import os
@@ -56,12 +57,11 @@ def get_kakao_route(start_x, start_y, end_x, end_y):
             for road in section.get('roads', []):
                 traffic_state = road.get('traffic_state', 0)
                 
-                # 카카오 4단계 색상 완벽 매핑
-                if traffic_state == 1: color = "#FF0000"   # 1. 매우 정체 (빨강)
-                elif traffic_state == 2: color = "#FF8C00" # 2. 정체 (주황)
-                elif traffic_state == 3: color = "#FFD700" # 3. 보통 (노랑)
-                elif traffic_state == 4: color = "#008000" # 4. 원활 (초록)
-                else: color = "#1E90FF"                    # 0. 정보없음 (파랑)
+                if traffic_state == 1: color = "#FF0000"   
+                elif traffic_state == 2: color = "#FF8C00" 
+                elif traffic_state == 3: color = "#FFD700" 
+                elif traffic_state == 4: color = "#008000" 
+                else: color = "#1E90FF"                    
 
                 vertexes = road.get('vertexes', [])
                 road_coords = []
@@ -118,7 +118,7 @@ def get_tmap_route(start_x, start_y, end_x, end_y):
                         line_coords.append([coord[1], coord[0]])
                         
                     if line_coords:
-                        # 🌟 티맵은 외부 API 정책상 혼잡도를 제공하지 않아 시원한 파란색으로 통일
+                        # 티맵 정책상 혼잡도는 파란색 고정
                         segments.append({"coords": line_coords, "color": "#1E90FF"})
                 
                 if geom.get('type') == 'Point' and 'description' in p:
@@ -174,11 +174,8 @@ if work_address:
 
 st.markdown("---")
 
-# 🌟 현재 한국 시간 기준으로 출근/퇴근 자동 판단
 kst_now = datetime.datetime.utcnow() + datetime.timedelta(hours=9)
 current_hour = kst_now.hour
-
-# 0시~11시까지는 출근길(0), 12시~23시까지는 퇴근길(1)
 default_route_idx = 0 if current_hour < 12 else 1
 
 route_choice = st.radio(
@@ -211,7 +208,6 @@ if is_custom:
 else:
     st.info(f"📍 **현재 선택된 경로:** {start_target if start_target else '(집 주소 미입력)'} ➔ {end_target if end_target else '(회사 주소 미입력)'}")
 
-# 🌟 스마트 UX 로직: 버튼을 누르지 않아도 앱을 처음 켜거나 경로를 바꿀 때 '자동 검색' 실행
 if "last_route_choice" not in st.session_state:
     st.session_state.last_route_choice = None
 
@@ -219,7 +215,6 @@ do_search = st.button("시간 비교 및 경로 보기", use_container_width=Tru
 
 if st.session_state.last_route_choice != route_choice:
     st.session_state.last_route_choice = route_choice
-    # 집/회사 주소가 세팅되어 있다면 묻지도 따지지도 않고 바로 자동 실행
     if start_target and end_target:
         do_search = True
 
@@ -255,7 +250,7 @@ if do_search:
 # --- 결과 화면 출력 ---
 if st.session_state.show_results:
     st.info("💡 **교통 상황 색상 안내:** 🔴 매우 정체 ｜ 🟠 정체 ｜ 🟡 보통 ｜ 🟢 원활 (카카오내비 전용)\n\n"
-            "⚠️ **안내:** 티맵 오픈 API 정책상 외부 앱에는 구간별 상세 혼잡도 색상 데이터가 제공되지 않아 기본 파란색으로 표기됩니다. 정체 구간은 카카오내비 지도를 참고해 주세요!")
+            "⚠️ **안내:** 티맵 오픈 API 정책상 외부 앱에는 구간별 혼잡도 데이터가 제한되어 파란색으로만 표기됩니다. 상세 정체 구간은 카카오내비 지도를 참고해 주세요!")
     res = st.session_state.results
     end_name, e_x, e_y = res["end_info"]
     safe_end_name = urllib.parse.quote(end_name)
@@ -275,7 +270,6 @@ if st.session_state.show_results:
     
     st.markdown("---")
     
-    # 🌟 커스텀 S(출발), E(도착) 마커 디자인
     start_html = '<div style="background-color: #1E90FF; color: white; border-radius: 50%; width: 28px; height: 28px; display: flex; justify-content: center; align-items: center; font-weight: bold; border: 2px solid white; box-shadow: 1px 1px 3px rgba(0,0,0,0.4); font-size: 14px; font-family: Arial, sans-serif;">S</div>'
     end_html = '<div style="background-color: #FF0000; color: white; border-radius: 50%; width: 28px; height: 28px; display: flex; justify-content: center; align-items: center; font-weight: bold; border: 2px solid white; box-shadow: 1px 1px 3px rgba(0,0,0,0.4); font-size: 14px; font-family: Arial, sans-serif;">E</div>'
     
@@ -286,9 +280,10 @@ if st.session_state.show_results:
         st.subheader("🗺️ 카카오내비 경로")
         k_segments = st.session_state.k_segments
         if k_segments:
-            # 🌟 전체 경로의 모든 좌표를 모아서 지도가 한눈에 꽉 차게 줌(Zoom) 설정
             all_k_coords = [coord for seg in k_segments for coord in seg['coords']]
-            m1 = folium.Map(location=all_k_coords[len(all_k_coords)//2], zoom_start=11)
+            
+            # 🌟 scrollWheelZoom=False 추가 (마우스 스크롤 줌 방지)
+            m1 = folium.Map(location=all_k_coords[len(all_k_coords)//2], zoom_start=11, scrollWheelZoom=False)
             
             folium.Marker(all_k_coords[0], icon=folium.DivIcon(html=start_html, icon_anchor=(14, 14))).add_to(m1)
             folium.Marker(all_k_coords[-1], icon=folium.DivIcon(html=end_html, icon_anchor=(14, 14))).add_to(m1)
@@ -296,8 +291,16 @@ if st.session_state.show_results:
             for seg in k_segments:
                 folium.PolyLine(locations=seg['coords'], color=seg['color'], weight=6, opacity=0.9).add_to(m1)
             
-            # S와 E가 무조건 한 화면에 다 들어오도록 지도 크기 자동 조절!
             m1.fit_bounds(all_k_coords)
+            
+            # 🌟 초기화(리프레시) 버튼 추가
+            reset_js_k = f"function(btn, map){{ map.fitBounds({all_k_coords}); }}"
+            EasyButton(
+                icon="<span style='font-size: 1.2em;'>🔄</span>",
+                title="지도 뷰 초기화",
+                onClick=reset_js_k
+            ).add_to(m1)
+            
             st_folium(m1, use_container_width=True, height=500, key="kakao_map")
             
     # 🗺️ 티맵 그리기
@@ -306,7 +309,9 @@ if st.session_state.show_results:
         t_segments = st.session_state.t_segments
         if t_segments:
             all_t_coords = [coord for seg in t_segments for coord in seg['coords']]
-            m2 = folium.Map(location=all_t_coords[len(all_t_coords)//2], zoom_start=11)
+            
+            # 🌟 scrollWheelZoom=False 추가 (마우스 스크롤 줌 방지)
+            m2 = folium.Map(location=all_t_coords[len(all_t_coords)//2], zoom_start=11, scrollWheelZoom=False)
             
             folium.Marker(all_t_coords[0], icon=folium.DivIcon(html=start_html, icon_anchor=(14, 14))).add_to(m2)
             folium.Marker(all_t_coords[-1], icon=folium.DivIcon(html=end_html, icon_anchor=(14, 14))).add_to(m2)
@@ -315,4 +320,13 @@ if st.session_state.show_results:
                 folium.PolyLine(locations=seg['coords'], color=seg['color'], weight=6, opacity=0.9).add_to(m2)
                 
             m2.fit_bounds(all_t_coords)
+            
+            # 🌟 초기화(리프레시) 버튼 추가
+            reset_js_t = f"function(btn, map){{ map.fitBounds({all_t_coords}); }}"
+            EasyButton(
+                icon="<span style='font-size: 1.2em;'>🔄</span>",
+                title="지도 뷰 초기화",
+                onClick=reset_js_t
+            ).add_to(m2)
+            
             st_folium(m2, use_container_width=True, height=500, key="tmap_map")
