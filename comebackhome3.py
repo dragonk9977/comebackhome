@@ -50,18 +50,17 @@ def get_kakao_route(start_x, start_y, end_x, end_y):
         distance_km = round(summary['distance'] / 1000, 1)
         duration_min = round(summary['duration'] / 60)
         
-        # 🌟 구간별 교통정보 기반 선 색상 쪼개기
         segments = []
         for section in route.get('sections', []):
             for road in section.get('roads', []):
                 traffic_state = road.get('traffic_state', 0)
                 
                 # 카카오 교통상태: 1(정체), 2(지체), 3(서행), 4(원활)
-                if traffic_state == 1: color = "#FF0000"   # 빨강 (정체)
-                elif traffic_state == 2: color = "#FF8C00" # 주황 (지체)
-                elif traffic_state == 3: color = "#FFD700" # 노랑 (서행)
-                elif traffic_state == 4: color = "#008000" # 초록 (원활)
-                else: color = "#1E90FF"                    # 파랑 (정보없음)
+                if traffic_state == 1: color = "#FF0000"   
+                elif traffic_state == 2: color = "#FF8C00" 
+                elif traffic_state == 3: color = "#FFD700" 
+                elif traffic_state == 4: color = "#008000" 
+                else: color = "#1E90FF"                    
 
                 vertexes = road.get('vertexes', [])
                 road_coords = []
@@ -77,7 +76,8 @@ def get_kakao_route(start_x, start_y, end_x, end_y):
 
 # --- 티맵 API 통신 ---
 def get_tmap_route(start_x, start_y, end_x, end_y):
-    url = "https://apis.openapi.sk.com/tmap/routes?version=1&format=json"
+    # 🌟 수정 1: URL 끝에 trafficInfo=Y 를 직접 강제로 꽂아넣어서 API가 절대 무시하지 못하게 합니다.
+    url = "https://apis.openapi.sk.com/tmap/routes?version=1&format=json&trafficInfo=Y"
     headers = {
         "appKey": TMAP_APP_KEY,
         "Accept": "application/json",
@@ -94,7 +94,7 @@ def get_tmap_route(start_x, start_y, end_x, end_y):
         "reqCoordType": "WGS84GEO", 
         "resCoordType": "WGS84GEO",
         "searchOption": "0",
-        "trafficInfo": "Y" # 🌟 티맵 실시간 교통정보 요청 추가!
+        "trafficInfo": "Y" 
     }
     
     try:
@@ -106,7 +106,6 @@ def get_tmap_route(start_x, start_y, end_x, end_y):
             distance_km = round(prop['totalDistance'] / 1000, 1)
             duration_min = round(prop['totalTime'] / 60) 
             
-            # 🌟 구간별 교통정보 기반 선 색상 쪼개기
             segments = []
             guides = []
             
@@ -115,14 +114,15 @@ def get_tmap_route(start_x, start_y, end_x, end_y):
                 p = feature.get('properties', {})
                 
                 if geom.get('type') == 'LineString':
-                    congestion = p.get('congestion', 0)
+                    # 🌟 수정 2: 티맵 서버가 문자로 던져줘도 에러가 안 나도록 강제로 숫자(int)로 묶어버립니다.
+                    congestion = int(p.get('congestion', 0))
                     
                     # 티맵 혼잡도: 4(정체), 3(지체), 2(서행), 1(원활)
-                    if congestion == 4: color = "#FF0000"   # 빨강 (정체)
-                    elif congestion == 3: color = "#FF8C00" # 주황 (지체)
-                    elif congestion == 2: color = "#FFD700" # 노랑 (서행)
-                    elif congestion == 1: color = "#008000" # 초록 (원활)
-                    else: color = "#1E90FF"                 # 파랑 (정보없음)
+                    if congestion == 4: color = "#FF0000"   
+                    elif congestion == 3: color = "#FF8C00" 
+                    elif congestion == 2: color = "#FFD700" 
+                    elif congestion == 1: color = "#008000" 
+                    else: color = "#1E90FF"                 
 
                     line_coords = []
                     for coord in geom.get('coordinates', []):
@@ -278,7 +278,6 @@ if st.session_state.show_results:
             folium.Marker(k_segments[0]['coords'][0], popup="출발", icon=folium.Icon(color="blue", icon="play")).add_to(m1)
             folium.Marker(k_segments[-1]['coords'][-1], popup="도착", icon=folium.Icon(color="red", icon="stop")).add_to(m1)
             
-            # 구간별로 선을 따로 그리기
             for seg in k_segments:
                 folium.PolyLine(locations=seg['coords'], color=seg['color'], weight=6, opacity=0.9).add_to(m1)
                 
@@ -296,7 +295,6 @@ if st.session_state.show_results:
             folium.Marker(t_segments[0]['coords'][0], popup="출발", icon=folium.Icon(color="blue", icon="play")).add_to(m2)
             folium.Marker(t_segments[-1]['coords'][-1], popup="도착", icon=folium.Icon(color="red", icon="stop")).add_to(m2)
             
-            # 구간별로 선을 따로 그리기
             for seg in t_segments:
                 folium.PolyLine(locations=seg['coords'], color=seg['color'], weight=6, opacity=0.9).add_to(m2)
                 
