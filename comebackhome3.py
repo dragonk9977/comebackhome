@@ -268,24 +268,33 @@ if st.session_state.show_results:
     
     st.markdown("---")
     
-    # 🌟 지도 전체 화면 복구용 리프레시 버튼 (이 버튼 하나면 충분하고 에러도 절대 안 납니다!)
+    # 🌟 지도 전체 화면 복구용 리프레시 버튼 
     if st.button("🔄 지도 화면 원래대로 되돌리기 (경로 한눈에 보기)", use_container_width=True):
         pass
     
     start_html = '<div style="background-color: #1E90FF; color: white; border-radius: 50%; width: 28px; height: 28px; display: flex; justify-content: center; align-items: center; font-weight: bold; border: 2px solid white; box-shadow: 1px 1px 3px rgba(0,0,0,0.4); font-size: 14px; font-family: Arial, sans-serif;">S</div>'
     end_html = '<div style="background-color: #FF0000; color: white; border-radius: 50%; width: 28px; height: 28px; display: flex; justify-content: center; align-items: center; font-weight: bold; border: 2px solid white; box-shadow: 1px 1px 3px rgba(0,0,0,0.4); font-size: 14px; font-family: Arial, sans-serif;">E</div>'
     
+    # 🌟 구글맵 타일 주소 설정 (hl=ko 옵션으로 한글 지명 표기)
+    google_tiles = "https://mt1.google.com/vt/lyrs=m&hl=ko&x={x}&y={y}&z={z}"
+    
     map_col1, map_col2 = st.columns(2)
     
-    # 🗺️ 카카오맵 그리기
+    # 🗺️ 카카오맵 그리기 (구글맵 배경)
     with map_col1:
         st.subheader("🗺️ 카카오내비 경로")
         k_segments = st.session_state.k_segments
         if k_segments:
             all_k_coords = [coord for seg in k_segments for coord in seg['coords']]
             
-            # scrollWheelZoom=False (마우스 휠 스크롤 방지 유지)
-            m1 = folium.Map(location=all_k_coords[len(all_k_coords)//2], zoom_start=11, scrollWheelZoom=False)
+            # 구글맵 타일 적용
+            m1 = folium.Map(
+                location=all_k_coords[len(all_k_coords)//2], 
+                zoom_start=11, 
+                scrollWheelZoom=False,
+                tiles=google_tiles,
+                attr="Google Maps"
+            )
             
             folium.Marker(all_k_coords[0], icon=folium.DivIcon(html=start_html, icon_anchor=(14, 14))).add_to(m1)
             folium.Marker(all_k_coords[-1], icon=folium.DivIcon(html=end_html, icon_anchor=(14, 14))).add_to(m1)
@@ -296,15 +305,21 @@ if st.session_state.show_results:
             m1.fit_bounds(all_k_coords)
             st_folium(m1, use_container_width=True, height=500, key="kakao_map")
             
-    # 🗺️ 티맵 그리기
+    # 🗺️ 티맵 그리기 (구글맵 배경)
     with map_col2:
         st.subheader("🗺️ 티맵 경로")
         t_segments = st.session_state.t_segments
         if t_segments:
             all_t_coords = [coord for seg in t_segments for coord in seg['coords']]
             
-            # scrollWheelZoom=False (마우스 휠 스크롤 방지 유지)
-            m2 = folium.Map(location=all_t_coords[len(all_t_coords)//2], zoom_start=11, scrollWheelZoom=False)
+            # 구글맵 타일 적용
+            m2 = folium.Map(
+                location=all_t_coords[len(all_t_coords)//2], 
+                zoom_start=11, 
+                scrollWheelZoom=False,
+                tiles=google_tiles,
+                attr="Google Maps"
+            )
             
             folium.Marker(all_t_coords[0], icon=folium.DivIcon(html=start_html, icon_anchor=(14, 14))).add_to(m2)
             folium.Marker(all_t_coords[-1], icon=folium.DivIcon(html=end_html, icon_anchor=(14, 14))).add_to(m2)
