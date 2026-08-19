@@ -1,7 +1,6 @@
 import streamlit as st
 import requests
 import folium
-from folium.plugins import EasyButton # 🌟 지도 새로고침 버튼을 위한 라이브러리 추가
 from streamlit_folium import st_folium
 import base64
 import os
@@ -118,7 +117,6 @@ def get_tmap_route(start_x, start_y, end_x, end_y):
                         line_coords.append([coord[1], coord[0]])
                         
                     if line_coords:
-                        # 티맵 정책상 혼잡도는 파란색 고정
                         segments.append({"coords": line_coords, "color": "#1E90FF"})
                 
                 if geom.get('type') == 'Point' and 'description' in p:
@@ -270,6 +268,10 @@ if st.session_state.show_results:
     
     st.markdown("---")
     
+    # 🌟 지도 전체 화면 복구용 리프레시 버튼 (이 버튼 하나면 충분하고 에러도 절대 안 납니다!)
+    if st.button("🔄 지도 화면 원래대로 되돌리기 (경로 한눈에 보기)", use_container_width=True):
+        pass
+    
     start_html = '<div style="background-color: #1E90FF; color: white; border-radius: 50%; width: 28px; height: 28px; display: flex; justify-content: center; align-items: center; font-weight: bold; border: 2px solid white; box-shadow: 1px 1px 3px rgba(0,0,0,0.4); font-size: 14px; font-family: Arial, sans-serif;">S</div>'
     end_html = '<div style="background-color: #FF0000; color: white; border-radius: 50%; width: 28px; height: 28px; display: flex; justify-content: center; align-items: center; font-weight: bold; border: 2px solid white; box-shadow: 1px 1px 3px rgba(0,0,0,0.4); font-size: 14px; font-family: Arial, sans-serif;">E</div>'
     
@@ -282,7 +284,7 @@ if st.session_state.show_results:
         if k_segments:
             all_k_coords = [coord for seg in k_segments for coord in seg['coords']]
             
-            # 🌟 scrollWheelZoom=False 추가 (마우스 스크롤 줌 방지)
+            # scrollWheelZoom=False (마우스 휠 스크롤 방지 유지)
             m1 = folium.Map(location=all_k_coords[len(all_k_coords)//2], zoom_start=11, scrollWheelZoom=False)
             
             folium.Marker(all_k_coords[0], icon=folium.DivIcon(html=start_html, icon_anchor=(14, 14))).add_to(m1)
@@ -292,15 +294,6 @@ if st.session_state.show_results:
                 folium.PolyLine(locations=seg['coords'], color=seg['color'], weight=6, opacity=0.9).add_to(m1)
             
             m1.fit_bounds(all_k_coords)
-            
-            # 🌟 초기화(리프레시) 버튼 추가
-            reset_js_k = f"function(btn, map){{ map.fitBounds({all_k_coords}); }}"
-            EasyButton(
-                icon="<span style='font-size: 1.2em;'>🔄</span>",
-                title="지도 뷰 초기화",
-                onClick=reset_js_k
-            ).add_to(m1)
-            
             st_folium(m1, use_container_width=True, height=500, key="kakao_map")
             
     # 🗺️ 티맵 그리기
@@ -310,7 +303,7 @@ if st.session_state.show_results:
         if t_segments:
             all_t_coords = [coord for seg in t_segments for coord in seg['coords']]
             
-            # 🌟 scrollWheelZoom=False 추가 (마우스 스크롤 줌 방지)
+            # scrollWheelZoom=False (마우스 휠 스크롤 방지 유지)
             m2 = folium.Map(location=all_t_coords[len(all_t_coords)//2], zoom_start=11, scrollWheelZoom=False)
             
             folium.Marker(all_t_coords[0], icon=folium.DivIcon(html=start_html, icon_anchor=(14, 14))).add_to(m2)
@@ -320,13 +313,4 @@ if st.session_state.show_results:
                 folium.PolyLine(locations=seg['coords'], color=seg['color'], weight=6, opacity=0.9).add_to(m2)
                 
             m2.fit_bounds(all_t_coords)
-            
-            # 🌟 초기화(리프레시) 버튼 추가
-            reset_js_t = f"function(btn, map){{ map.fitBounds({all_t_coords}); }}"
-            EasyButton(
-                icon="<span style='font-size: 1.2em;'>🔄</span>",
-                title="지도 뷰 초기화",
-                onClick=reset_js_t
-            ).add_to(m2)
-            
             st_folium(m2, use_container_width=True, height=500, key="tmap_map")
