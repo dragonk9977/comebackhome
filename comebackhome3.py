@@ -4,7 +4,7 @@ import folium
 from streamlit_folium import st_folium
 import base64
 import os
-import urllib.parse # 🌟 앱으로 한글 이름을 보낼 때 깨지지 않게 해주는 기능 추가
+import urllib.parse
 
 # ==========================================
 # 🔑 API 키 설정 (클라우드 배포용 안전 처리)
@@ -50,15 +50,29 @@ def get_kakao_route(start_x, start_y, end_x, end_y):
         distance_km = round(summary['distance'] / 1000, 1)
         duration_min = round(summary['duration'] / 60)
         
-        path_coords = []
+        # 🌟 구간별 교통정보 기반 선 색상 쪼개기
+        segments = []
         for section in route.get('sections', []):
             for road in section.get('roads', []):
+                traffic_state = road.get('traffic_state', 0)
+                
+                # 카카오 교통상태: 1(정체), 2(지체), 3(서행), 4(원활)
+                if traffic_state == 1: color = "#FF0000"   # 빨강 (정체)
+                elif traffic_state == 2: color = "#FF8C00" # 주황 (지체)
+                elif traffic_state == 3: color = "#FFD700" # 노랑 (서행)
+                elif traffic_state == 4: color = "#008000" # 초록 (원활)
+                else: color = "#1E90FF"                    # 파랑 (정보없음)
+
                 vertexes = road.get('vertexes', [])
+                road_coords = []
                 for i in range(0, len(vertexes), 2):
-                    path_coords.append([vertexes[i+1], vertexes[i]])
+                    road_coords.append([vertexes[i+1], vertexes[i]])
+                    
+                if road_coords:
+                    segments.append({"coords": road_coords, "color": color})
                     
         guides = [g.get('guidance') for s in route.get('sections', []) for g in s.get('guides', []) if g.get('guidance')]
-        return distance_km, duration_min, path_coords, guides
+        return distance_km, duration_min, segments, guides
     return None, None, [], []
 
 # --- 티맵 API 통신 ---
@@ -79,7 +93,8 @@ def get_tmap_route(start_x, start_y, end_x, end_y):
         "endName": "도착지",   
         "reqCoordType": "WGS84GEO", 
         "resCoordType": "WGS84GEO",
-        "searchOption": "0"
+        "searchOption": "0",
+        "trafficInfo": "Y" # 🌟 티맵 실시간 교통정보 요청 추가!
     }
     
     try:
@@ -91,7 +106,8 @@ def get_tmap_route(start_x, start_y, end_x, end_y):
             distance_km = round(prop['totalDistance'] / 1000, 1)
             duration_min = round(prop['totalTime'] / 60) 
             
-            path_coords = []
+            # 🌟 구간별 교통정보 기반 선 색상 쪼개기
+            segments = []
             guides = []
             
             for feature in data['features']:
@@ -99,13 +115,26 @@ def get_tmap_route(start_x, start_y, end_x, end_y):
                 p = feature.get('properties', {})
                 
                 if geom.get('type') == 'LineString':
+                    congestion = p.get('congestion', 0)
+                    
+                    # 티맵 혼잡도: 4(정체), 3(지체), 2(서행), 1(원활)
+                    if congestion == 4: color = "#FF0000"   # 빨강 (정체)
+                    elif congestion == 3: color = "#FF8C00" # 주황 (지체)
+                    elif congestion == 2: color = "#FFD700" # 노랑 (서행)
+                    elif congestion == 1: color = "#008000" # 초록 (원활)
+                    else: color = "#1E90FF"                 # 파랑 (정보없음)
+
+                    line_coords = []
                     for coord in geom.get('coordinates', []):
-                        path_coords.append([coord[1], coord[0]])
+                        line_coords.append([coord[1], coord[0]])
+                        
+                    if line_coords:
+                        segments.append({"coords": line_coords, "color": color})
                 
                 if geom.get('type') == 'Point' and 'description' in p:
                     guides.append(p['description'])
                     
-            return distance_km, duration_min, path_coords, guides
+            return distance_km, duration_min, segments, guides
         else:
             return None, None, [], []
             
@@ -196,18 +225,17 @@ if st.button("시간 비교 및 경로 보기", use_container_width=True):
             end_x, end_y = get_kakao_coords(end_target)
     
             if start_x and end_x:
-                k_dist, k_dur, k_path, k_guides = get_kakao_route(start_x, start_y, end_x, end_y)
-                t_dist, t_dur, t_path, t_guides = get_tmap_route(start_x, start_y, end_x, end_y)
+                k_dist, k_dur, k_segments, k_guides = get_kakao_route(start_x, start_y, end_x, end_y)
+                t_dist, t_dur, t_segments, t_guides = get_tmap_route(start_x, start_y, end_x, end_y)
                 
-                # 🌟 검색 성공 시 좌표와 목적지 이름을 세션에 함께 저장합니다.
                 st.session_state.results = {
                     "kakao": (k_dist, k_dur),
                     "tmap": (t_dist, t_dur),
-                    "end_info": (end_target, end_x, end_y) # 딥링크용 데이터
+                    "end_info": (end_target, end_x, end_y) 
                 }
-                st.session_state.k_path = k_path
+                st.session_state.k_segments = k_segments
                 st.session_state.k_guides = k_guides
-                st.session_state.t_path = t_path
+                st.session_state.t_segments = t_segments
                 st.session_state.t_guides = t_guides
                 st.session_state.show_results = True
             else:
@@ -216,24 +244,21 @@ if st.button("시간 비교 및 경로 보기", use_container_width=True):
 
 # --- 결과 화면 출력 ---
 if st.session_state.show_results:
+    st.markdown("💡 **교통 상황 색상 안내:** 🟢 원활 ｜ 🟡 서행 ｜ 🟠 지체 ｜ 🔴 정체")
     res = st.session_state.results
     end_name, e_x, e_y = res["end_info"]
-    safe_end_name = urllib.parse.quote(end_name) # 한글 이름 URL 인코딩
+    safe_end_name = urllib.parse.quote(end_name)
     
     st.subheader("📊 예상 소요 시간 결과")
     c1, c2 = st.columns(2)
     
-    # 🟡 카카오 결과 및 앱 실행 버튼
     k_dist, k_dur = res["kakao"]
     c1.metric(label="🟡 카카오내비", value=format_time(k_dur), delta=f"{k_dist} km" if k_dist else "데이터 없음", delta_color="off")
-    
     kakao_link = f"https://map.kakao.com/link/to/{safe_end_name},{e_y},{e_x}"
     c1.markdown(f'<a href="{kakao_link}" target="_blank" style="display: block; width: 100%; text-align: center; padding: 12px; background-color: #FEE500; color: #000000; text-decoration: none; border-radius: 8px; font-weight: bold; margin-top: 10px; box-shadow: 0px 4px 6px rgba(0,0,0,0.1);">🟡 카카오내비 앱 열기</a>', unsafe_allow_html=True)
     
-    # 🔴 티맵 결과 및 앱 실행 버튼
     t_dist, t_dur = res["tmap"]
     c2.metric(label="🔴 티맵", value=format_time(t_dur), delta=f"{t_dist} km" if t_dist else "데이터 없음", delta_color="off")
-    
     tmap_link = f"tmap://route?goalname={safe_end_name}&goalx={e_x}&goaly={e_y}"
     c2.markdown(f'<a href="{tmap_link}" style="display: block; width: 100%; text-align: center; padding: 12px; background-color: #EF4C35; color: #FFFFFF; text-decoration: none; border-radius: 8px; font-weight: bold; margin-top: 10px; box-shadow: 0px 4px 6px rgba(0,0,0,0.1);">🔴 티맵 앱 열기</a>', unsafe_allow_html=True)
     
@@ -241,24 +266,38 @@ if st.session_state.show_results:
     
     map_col1, map_col2 = st.columns(2)
     
+    # 🗺️ 카카오맵 그리기
     with map_col1:
         st.subheader("🗺️ 카카오내비 경로")
-        k_path = st.session_state.k_path
-        if k_path:
-            mid_idx = len(k_path) // 2
-            m1 = folium.Map(location=k_path[mid_idx], zoom_start=11)
-            folium.Marker(k_path[0], popup="출발", icon=folium.Icon(color="blue", icon="play")).add_to(m1)
-            folium.Marker(k_path[-1], popup="도착", icon=folium.Icon(color="red", icon="stop")).add_to(m1)
-            folium.PolyLine(locations=k_path, color="#1E90FF", weight=5, opacity=0.8).add_to(m1)
+        k_segments = st.session_state.k_segments
+        if k_segments:
+            mid_idx = len(k_segments) // 2
+            mid_coord = k_segments[mid_idx]['coords'][0]
+            m1 = folium.Map(location=mid_coord, zoom_start=11)
+            
+            folium.Marker(k_segments[0]['coords'][0], popup="출발", icon=folium.Icon(color="blue", icon="play")).add_to(m1)
+            folium.Marker(k_segments[-1]['coords'][-1], popup="도착", icon=folium.Icon(color="red", icon="stop")).add_to(m1)
+            
+            # 구간별로 선을 따로 그리기
+            for seg in k_segments:
+                folium.PolyLine(locations=seg['coords'], color=seg['color'], weight=6, opacity=0.9).add_to(m1)
+                
             st_folium(m1, use_container_width=True, height=500, key="kakao_map")
             
+    # 🗺️ 티맵 그리기
     with map_col2:
         st.subheader("🗺️ 티맵 경로")
-        t_path = st.session_state.t_path
-        if t_path:
-            mid_idx = len(t_path) // 2
-            m2 = folium.Map(location=t_path[mid_idx], zoom_start=11)
-            folium.Marker(t_path[0], popup="출발", icon=folium.Icon(color="blue", icon="play")).add_to(m2)
-            folium.Marker(t_path[-1], popup="도착", icon=folium.Icon(color="red", icon="stop")).add_to(m2)
-            folium.PolyLine(locations=t_path, color="#FF4500", weight=5, opacity=0.8).add_to(m2)
+        t_segments = st.session_state.t_segments
+        if t_segments:
+            mid_idx = len(t_segments) // 2
+            mid_coord = t_segments[mid_idx]['coords'][0]
+            m2 = folium.Map(location=mid_coord, zoom_start=11)
+            
+            folium.Marker(t_segments[0]['coords'][0], popup="출발", icon=folium.Icon(color="blue", icon="play")).add_to(m2)
+            folium.Marker(t_segments[-1]['coords'][-1], popup="도착", icon=folium.Icon(color="red", icon="stop")).add_to(m2)
+            
+            # 구간별로 선을 따로 그리기
+            for seg in t_segments:
+                folium.PolyLine(locations=seg['coords'], color=seg['color'], weight=6, opacity=0.9).add_to(m2)
+                
             st_folium(m2, use_container_width=True, height=500, key="tmap_map")
