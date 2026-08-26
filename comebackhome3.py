@@ -8,36 +8,22 @@ import urllib.parse
 import datetime
 
 # ==========================================
-# 🖥️ 웹 페이지 기본 설정 (가장 먼저 실행되어야 함)
+# 🖥️ 웹 페이지 기본 설정
 # ==========================================
 st.set_page_config(page_title="나만의 내비게이션 비교", page_icon="🚗", layout="wide")
 
-# ==========================================
-# 🎨 전체 폰트 및 커스텀 스타일 CSS 디자인 적용
-# ==========================================
 custom_css = """
 <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
-    
-    html, body, [class*="css"]  {
-        font-family: 'Pretendard', sans-serif !important;
-    }
-
+    html, body, [class*="css"]  { font-family: 'Pretendard', sans-serif !important; }
     div.stButton > button[kind="primary"] {
-        background-color: #FEE500 !important;
-        color: #000000 !important;
-        font-weight: 800 !important;
-        font-size: 18px !important;
-        border: none !important;
-        border-radius: 10px !important;
-        padding: 10px 24px !important;
-        box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.25) !important;
-        transition: all 0.2s ease-in-out !important;
+        background-color: #FEE500 !important; color: #000000 !important;
+        font-weight: 800 !important; font-size: 18px !important; border: none !important;
+        border-radius: 10px !important; padding: 10px 24px !important;
+        box-shadow: 0px 4px 10px rgba(0, 0, 0, 0.25) !important; transition: all 0.2s ease-in-out !important;
     }
-    
     div.stButton > button[kind="primary"]:hover {
-        transform: translateY(-2px) !important;
-        box-shadow: 0px 6px 15px rgba(0, 0, 0, 0.35) !important;
+        transform: translateY(-2px) !important; box-shadow: 0px 6px 15px rgba(0, 0, 0, 0.35) !important;
     }
 </style>
 """
@@ -56,36 +42,28 @@ except:
     TMAP_APP_KEY = "kstcD6L0he3GU4SSTkWNF6IHGefkURVXak3qpabh"
     NAVER_CLIENT_ID = "dz4e8jf520"
     NAVER_CLIENT_SECRET = "sHpviSLTL5jDmLF3CGlMxDfWAXxFmpfKM1UG4uR5"
-# ==========================================
 
 # --- 카카오 API 통신 ---
 def get_kakao_coords(address):
     headers = {"Authorization": f"KakaoAK {KAKAO_API_KEY}"}
     keyword_url = "https://dapi.kakao.com/v2/local/search/keyword.json"
-    res_keyword = requests.get(keyword_url, headers=headers, params={"query": address})
-    data_keyword = res_keyword.json()
-    if data_keyword.get('documents'):
-        return data_keyword['documents'][0]['x'], data_keyword['documents'][0]['y']
-        
+    res_keyword = requests.get(keyword_url, headers=headers, params={"query": address}).json()
+    if res_keyword.get('documents'): return res_keyword['documents'][0]['x'], res_keyword['documents'][0]['y']
     addr_url = "https://dapi.kakao.com/v2/local/search/address.json"
-    res_addr = requests.get(addr_url, headers=headers, params={"query": address})
-    data_addr = res_addr.json()
-    if data_addr.get('documents'):
-        return data_addr['documents'][0]['x'], data_addr['documents'][0]['y']
+    res_addr = requests.get(addr_url, headers=headers, params={"query": address}).json()
+    if res_addr.get('documents'): return res_addr['documents'][0]['x'], res_addr['documents'][0]['y']
     return None, None
 
 def get_kakao_route(start_x, start_y, end_x, end_y):
     url = "https://apis-navi.kakaomobility.com/v1/directions"
     headers = {"Authorization": f"KakaoAK {KAKAO_API_KEY}"}
     params = {"origin": f"{start_x},{start_y}", "destination": f"{end_x},{end_y}", "priority": "RECOMMEND"}
-    res = requests.get(url, headers=headers, params=params)
-    data = res.json()
+    res = requests.get(url, headers=headers, params=params).json()
     
-    if data.get('routes'):
-        route = data['routes'][0]
-        summary = route['summary']
-        distance_km = round(summary['distance'] / 1000, 1)
-        duration_min = round(summary['duration'] / 60)
+    if res.get('routes'):
+        route = res['routes'][0]
+        distance_km = round(route['summary']['distance'] / 1000, 1)
+        duration_min = round(route['summary']['duration'] / 60)
         
         segments = []
         for section in route.get('sections', []):
@@ -97,90 +75,65 @@ def get_kakao_route(start_x, start_y, end_x, end_y):
                 elif traffic_state == 4: color = "#008000" 
                 else: color = "#1E90FF"                    
 
-                vertexes = road.get('vertexes', [])
-                road_coords = []
-                for i in range(0, len(vertexes), 2):
-                    road_coords.append([vertexes[i+1], vertexes[i]])
-                if road_coords:
-                    segments.append({"coords": road_coords, "color": color})
-                    
+                road_coords = [[v, road['vertexes'][i]] for i, v in enumerate(road['vertexes'][1::2])]
+                if road_coords: segments.append({"coords": road_coords, "color": color})
         return distance_km, duration_min, segments
     return None, None, []
 
 # --- 티맵 API 통신 ---
 def get_tmap_route(start_x, start_y, end_x, end_y):
     url = "https://apis.openapi.sk.com/tmap/routes?version=1&format=json"
-    headers = {
-        "appKey": TMAP_APP_KEY,
-        "Accept": "application/json",
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "startX": str(start_x), "startY": str(start_y), 
-        "endX": str(end_x), "endY": str(end_y),
-        "startName": "출발지", "endName": "도착지",   
-        "reqCoordType": "WGS84GEO", "resCoordType": "WGS84GEO",
-        "searchOption": "0"
-    }
-    
+    headers = {"appKey": TMAP_APP_KEY, "Accept": "application/json", "Content-Type": "application/json"}
+    payload = {"startX": str(start_x), "startY": str(start_y), "endX": str(end_x), "endY": str(end_y),
+               "startName": "출발지", "endName": "도착지", "reqCoordType": "WGS84GEO", "resCoordType": "WGS84GEO", "searchOption": "0"}
     try:
-        res = requests.post(url, headers=headers, json=payload)
-        data = res.json()
-        if 'features' in data:
-            prop = data['features'][0]['properties']
-            distance_km = round(prop['totalDistance'] / 1000, 1)
-            duration_min = round(prop['totalTime'] / 60) 
-            
+        res = requests.post(url, headers=headers, json=payload).json()
+        if 'features' in res:
+            distance_km = round(res['features'][0]['properties']['totalDistance'] / 1000, 1)
+            duration_min = round(res['features'][0]['properties']['totalTime'] / 60) 
             segments = []
-            for feature in data['features']:
+            for feature in res['features']:
                 geom = feature.get('geometry', {})
                 if geom.get('type') == 'LineString':
-                    line_coords = []
-                    for coord in geom.get('coordinates', []):
-                        line_coords.append([coord[1], coord[0]])
-                    if line_coords:
-                        segments.append({"coords": line_coords, "color": "#1E90FF"})
+                    line_coords = [[coord[1], coord[0]] for coord in geom.get('coordinates', [])]
+                    if line_coords: segments.append({"coords": line_coords, "color": "#1E90FF"})
             return distance_km, duration_min, segments
-        else:
-            return None, None, []
-    except Exception as e:
+        return None, None, []
+    except:
         return None, None, []
 
-# --- 네이버 API 통신 ---
+# --- 네이버 API 통신 (에러 진단 기능 추가) ---
 def get_naver_route(start_x, start_y, end_x, end_y):
     url = "https://naveropenapi.apigw.ntruss.com/map-direction/v1/driving"
-    # 🌟 수정 포인트: 네이버 서버가 안심하고 문을 열어주도록 Referer(출처)를 명시적으로 추가했습니다.
     headers = {
         "X-NCP-APIGW-API-KEY-ID": NAVER_CLIENT_ID,
         "X-NCP-APIGW-API-KEY": NAVER_CLIENT_SECRET,
-        "Referer": "https://comebackhome-btgh69rtejofrpdwagcwmu.streamlit.app"
+        "Referer": "http://localhost:8501" # 보안 통과를 위해 로컬호스트로 확실하게 고정
     }
-    params = {
-        "start": f"{start_x},{start_y}",
-        "goal": f"{end_x},{end_y}",
-        "option": "traoptimal" 
-    }
+    params = {"start": f"{start_x},{start_y}", "goal": f"{end_x},{end_y}", "option": "traoptimal"}
     
     try:
         res = requests.get(url, headers=headers, params=params)
         data = res.json()
+        
+        # 정상 작동 시
         if data.get('code') == 0:
             route = data['route']['traoptimal'][0]
-            summary = route['summary']
-            distance_km = round(summary['distance'] / 1000, 1)
-            duration_min = round(summary['duration'] / 1000 / 60)
+            distance_km = round(route['summary']['distance'] / 1000, 1)
+            duration_min = round(route['summary']['duration'] / 1000 / 60)
             
-            path = route['path']
-            line_coords = [[coord[1], coord[0]] for coord in path]
+            line_coords = [[coord[1], coord[0]] for coord in route['path']]
             segments = [{"coords": line_coords, "color": "#03C75A"}] 
             
-            return distance_km, duration_min, segments
+            return distance_km, duration_min, segments, ""
+        
+        # 🌟 네이버 서버가 거절했을 때 거절 사유를 텍스트로 뽑아냅니다
         else:
-            print(f"🔴 네이버 API 응답 에러: {data}")
-            return None, None, []
+            err_msg = data.get("error", {}).get("message") or data.get("message") or str(data)
+            return None, None, [], f"거절 사유: {err_msg}"
+            
     except Exception as e:
-        print(f"🔴 네이버 통신 실패: {e}")
-        return None, None, []
+        return None, None, [], f"통신 에러: {str(e)}"
 
 def format_time(duration_min):
     if duration_min is None: return "오류"
@@ -188,7 +141,7 @@ def format_time(duration_min):
     return f"{hours}시간 {mins}분" if hours > 0 else f"{mins}분"
 
 # ==========================================
-# 🖥️ 사이드바 & 커스텀 자동차 이미지 로직
+# 🖥️ 사이드바 & 커스텀 자동차 이미지
 # ==========================================
 with st.sidebar:
     st.markdown("### 🚘 내 차 이미지 설정")
@@ -197,14 +150,10 @@ with st.sidebar:
 
 b64_encoded = ""
 if uploaded_img is not None:
-    img_data = uploaded_img.read()
-    b64_encoded = base64.b64encode(img_data).decode()
+    b64_encoded = base64.b64encode(uploaded_img.read()).decode()
 else:
-    image_path = "mycar.jpg" 
-    if os.path.exists(image_path):
-        with open(image_path, "rb") as f:
-            img_data = f.read()
-            b64_encoded = base64.b64encode(img_data).decode()
+    if os.path.exists("mycar.jpg"):
+        with open("mycar.jpg", "rb") as f: b64_encoded = base64.b64encode(f.read()).decode()
 
 if b64_encoded:
     html_title = f"""
@@ -225,64 +174,38 @@ saved_work = st.query_params.get("work", "")
 
 st.markdown("### ⚙️ 나의 기본 주소 설정 (입력 시 즐겨찾기용 주소가 자동 생성됩니다)")
 setting_col1, setting_col2 = st.columns(2)
-with setting_col1:
-    home_address = st.text_input("🏠 우리 집", value=saved_home, placeholder="예: 경기도 의정부시 ...")
-with setting_col2:
-    work_address = st.text_input("🏢 우리 회사", value=saved_work, placeholder="예: 서울특별시 금천구 가산동 ...")
+with setting_col1: home_address = st.text_input("🏠 우리 집", value=saved_home, placeholder="예: 경기도 의정부시 ...")
+with setting_col2: work_address = st.text_input("🏢 우리 회사", value=saved_work, placeholder="예: 서울특별시 금천구 가산동 ...")
 
-if home_address:
-    st.query_params["home"] = home_address
-if work_address:
-    st.query_params["work"] = work_address
-
+if home_address: st.query_params["home"] = home_address
+if work_address: st.query_params["work"] = work_address
 st.markdown("---")
 
 kst_now = datetime.datetime.utcnow() + datetime.timedelta(hours=9)
-current_hour = kst_now.hour
-default_route_idx = 0 if current_hour < 12 else 1
-
-route_choice = st.radio(
-    "🚗 조회할 경로 선택",
-    ["1️⃣ 출근길 (집 ➔ 회사)", "2️⃣ 퇴근길 (회사 ➔ 집)", "3️⃣ 직접 설정"],
-    index=default_route_idx,
-    horizontal=True
-)
+route_choice = st.radio("🚗 조회할 경로 선택", ["1️⃣ 출근길 (집 ➔ 회사)", "2️⃣ 퇴근길 (회사 ➔ 집)", "3️⃣ 직접 설정"], index=0 if kst_now.hour < 12 else 1, horizontal=True)
 
 is_custom = False
-if route_choice == "1️⃣ 출근길 (집 ➔ 회사)":
-    start_target = home_address
-    end_target = work_address
-elif route_choice == "2️⃣ 퇴근길 (회사 ➔ 집)":
-    start_target = work_address
-    end_target = home_address
+if route_choice == "1️⃣ 출근길 (집 ➔ 회사)": start_target, end_target = home_address, work_address
+elif route_choice == "2️⃣ 퇴근길 (회사 ➔ 집)": start_target, end_target = work_address, home_address
 else:
     is_custom = True
-    start_target = ""
-    end_target = ""
+    start_target, end_target = "", ""
 
 st.markdown("<br>", unsafe_allow_html=True)
 
 if is_custom:
     col1, col2 = st.columns(2)
-    with col1:
-        start_target = st.text_input("출발지 직접 입력", placeholder="출발지를 입력하세요")
-    with col2:
-        end_target = st.text_input("도착지 직접 입력", placeholder="도착지를 입력하세요")
+    with col1: start_target = st.text_input("출발지 직접 입력", placeholder="출발지를 입력하세요")
+    with col2: end_target = st.text_input("도착지 직접 입력", placeholder="도착지를 입력하세요")
 else:
     st.info(f"📍 **현재 선택된 경로:** {start_target if start_target else '(집 주소 미입력)'} ➔ {end_target if end_target else '(회사 주소 미입력)'}")
 
-if "last_route_choice" not in st.session_state:
-    st.session_state.last_route_choice = None
-
+if "last_route_choice" not in st.session_state: st.session_state.last_route_choice = None
 do_search = st.button("시간 비교 및 경로 보기", use_container_width=True, type="primary")
-
 if st.session_state.last_route_choice != route_choice:
     st.session_state.last_route_choice = route_choice
-    if start_target and end_target:
-        do_search = True
-
-if "show_results" not in st.session_state:
-    st.session_state.show_results = False
+    if start_target and end_target: do_search = True
+if "show_results" not in st.session_state: st.session_state.show_results = False
 
 if do_search:
     if not start_target or not end_target:
@@ -295,12 +218,14 @@ if do_search:
             if start_x and end_x:
                 k_dist, k_dur, k_segments = get_kakao_route(start_x, start_y, end_x, end_y)
                 t_dist, t_dur, t_segments = get_tmap_route(start_x, start_y, end_x, end_y)
-                n_dist, n_dur, n_segments = get_naver_route(start_x, start_y, end_x, end_y)
+                
+                # 🌟 네이버는 에러 메시지도 함께 받아옵니다
+                n_dist, n_dur, n_segments, n_err = get_naver_route(start_x, start_y, end_x, end_y)
                 
                 st.session_state.results = {
                     "kakao": (k_dist, k_dur, k_segments),
                     "tmap": (t_dist, t_dur, t_segments),
-                    "naver": (n_dist, n_dur, n_segments),
+                    "naver": (n_dist, n_dur, n_segments, n_err),
                     "end_info": (end_target, end_x, end_y) 
                 }
                 st.session_state.show_results = True
@@ -310,6 +235,8 @@ if do_search:
 
 # --- 결과 화면 출력 ---
 if st.session_state.show_results:
+    st.info("💡 **교통 상황 색상 안내:** 🔴 매우 정체 ｜ 🟠 정체 ｜ 🟡 보통 ｜ 🟢 원활 (카카오내비 전용)\n\n"
+            "⚠️ **안내:** 티맵 오픈 API 정책상 외부 앱에는 구간별 혼잡도 데이터가 제한되어 파란색으로만 표기됩니다. 상세 정체 구간은 카카오내비 지도를 참고해 주세요!")
     res = st.session_state.results
     end_name, e_x, e_y = res["end_info"]
     safe_end_name = urllib.parse.quote(end_name)
@@ -329,19 +256,20 @@ if st.session_state.show_results:
     tmap_link = f"tmap://route?goalname={safe_end_name}&goalx={e_x}&goaly={e_y}"
     c2.markdown(f'<a href="{tmap_link}" style="display: block; width: 100%; text-align: center; padding: 12px; background-color: #EF4C35; color: #FFFFFF; text-decoration: none; border-radius: 8px; font-weight: bold; margin-top: 10px; box-shadow: 0px 4px 6px rgba(0,0,0,0.1);">🔴 티맵 앱 열기</a>', unsafe_allow_html=True)
     
-    # 🟢 네이버 지도
-    n_dist, n_dur, n_segments = res["naver"]
-    c3.metric(label="🟢 네이버 지도", value=format_time(n_dur), delta=f"{n_dist} km" if n_dist else "데이터 없음", delta_color="off")
+    # 🟢 네이버 지도 (에러가 발생하면 에러 내용을 텍스트로 보여줍니다!)
+    n_dist, n_dur, n_segments, n_err = res["naver"]
+    if n_err:
+        c3.metric(label="🟢 네이버 지도 (에러발생)", value="연결 오류", delta=n_err, delta_color="off")
+    else:
+        c3.metric(label="🟢 네이버 지도", value=format_time(n_dur), delta=f"{n_dist} km", delta_color="off")
+        
     naver_link = f"nmap://route/car?dlat={e_y}&dlng={e_x}&dname={safe_end_name}&appname=comebackhome"
     c3.markdown(f'<a href="{naver_link}" style="display: block; width: 100%; text-align: center; padding: 12px; background-color: #03C75A; color: #FFFFFF; text-decoration: none; border-radius: 8px; font-weight: bold; margin-top: 10px; box-shadow: 0px 4px 6px rgba(0,0,0,0.1);">🟢 네이버 앱 열기</a>', unsafe_allow_html=True)
     
     st.markdown("---")
     
-    if "map_reset_key" not in st.session_state:
-        st.session_state.map_reset_key = 0
-
-    if st.button("🔄 지도 화면 원래대로 되돌리기 (경로 한눈에 보기)", use_container_width=True):
-        st.session_state.map_reset_key += 1
+    if "map_reset_key" not in st.session_state: st.session_state.map_reset_key = 0
+    if st.button("🔄 지도 화면 원래대로 되돌리기 (경로 한눈에 보기)", use_container_width=True): st.session_state.map_reset_key += 1
     
     start_html = '<div style="background-color: #1E90FF; color: white; border-radius: 50%; width: 28px; height: 28px; display: flex; justify-content: center; align-items: center; font-weight: bold; border: 2px solid white; box-shadow: 1px 1px 3px rgba(0,0,0,0.4); font-size: 14px; font-family: Arial, sans-serif;">S</div>'
     end_html = '<div style="background-color: #FF0000; color: white; border-radius: 50%; width: 28px; height: 28px; display: flex; justify-content: center; align-items: center; font-weight: bold; border: 2px solid white; box-shadow: 1px 1px 3px rgba(0,0,0,0.4); font-size: 14px; font-family: Arial, sans-serif;">E</div>'
@@ -357,8 +285,7 @@ if st.session_state.show_results:
             m1 = folium.Map(location=all_k_coords[len(all_k_coords)//2], zoom_start=11, tiles=google_tiles, attr="Google Maps")
             folium.Marker(all_k_coords[0], icon=folium.DivIcon(html=start_html, icon_anchor=(14, 14))).add_to(m1)
             folium.Marker(all_k_coords[-1], icon=folium.DivIcon(html=end_html, icon_anchor=(14, 14))).add_to(m1)
-            for seg in k_segments:
-                folium.PolyLine(locations=seg['coords'], color=seg['color'], weight=6, opacity=0.9).add_to(m1)
+            for seg in k_segments: folium.PolyLine(locations=seg['coords'], color=seg['color'], weight=6, opacity=0.9).add_to(m1)
             m1.fit_bounds(all_k_coords)
             st_folium(m1, use_container_width=True, height=500, key=f"kakao_map_{st.session_state.map_reset_key}")
             
@@ -370,8 +297,7 @@ if st.session_state.show_results:
             m2 = folium.Map(location=all_t_coords[len(all_t_coords)//2], zoom_start=11, tiles=google_tiles, attr="Google Maps")
             folium.Marker(all_t_coords[0], icon=folium.DivIcon(html=start_html, icon_anchor=(14, 14))).add_to(m2)
             folium.Marker(all_t_coords[-1], icon=folium.DivIcon(html=end_html, icon_anchor=(14, 14))).add_to(m2)
-            for seg in t_segments:
-                folium.PolyLine(locations=seg['coords'], color=seg['color'], weight=6, opacity=0.9).add_to(m2)
+            for seg in t_segments: folium.PolyLine(locations=seg['coords'], color=seg['color'], weight=6, opacity=0.9).add_to(m2)
             m2.fit_bounds(all_t_coords)
             st_folium(m2, use_container_width=True, height=500, key=f"tmap_map_{st.session_state.map_reset_key}")
 
@@ -383,7 +309,8 @@ if st.session_state.show_results:
             m3 = folium.Map(location=all_n_coords[len(all_n_coords)//2], zoom_start=11, tiles=google_tiles, attr="Google Maps")
             folium.Marker(all_n_coords[0], icon=folium.DivIcon(html=start_html, icon_anchor=(14, 14))).add_to(m3)
             folium.Marker(all_n_coords[-1], icon=folium.DivIcon(html=end_html, icon_anchor=(14, 14))).add_to(m3)
-            for seg in n_segments:
-                folium.PolyLine(locations=seg['coords'], color=seg['color'], weight=6, opacity=0.9).add_to(m3)
+            for seg in n_segments: folium.PolyLine(locations=seg['coords'], color=seg['color'], weight=6, opacity=0.9).add_to(m3)
             m3.fit_bounds(all_n_coords)
             st_folium(m3, use_container_width=True, height=500, key=f"naver_map_{st.session_state.map_reset_key}")
+        elif n_err:
+            st.error(f"네이버 지도를 불러오지 못했습니다.\n\n{n_err}")
