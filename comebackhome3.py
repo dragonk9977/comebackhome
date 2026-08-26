@@ -17,16 +17,14 @@ st.set_page_config(page_title="나만의 내비게이션 비교", page_icon="�
 # ==========================================
 custom_css = """
 <style>
-    /* 1. 전체 화면 프리텐다드(Pretendard) 폰트 적용 */
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
     
     html, body, [class*="css"]  {
         font-family: 'Pretendard', sans-serif !important;
     }
 
-    /* 2. 메인 실행 버튼 스타일링 및 그림자 강조 */
     div.stButton > button[kind="primary"] {
-        background-color: #FEE500 !important; /* 카카오 옐로우 */
+        background-color: #FEE500 !important;
         color: #000000 !important;
         font-weight: 800 !important;
         font-size: 18px !important;
@@ -151,14 +149,16 @@ def get_tmap_route(start_x, start_y, end_x, end_y):
 # --- 네이버 API 통신 ---
 def get_naver_route(start_x, start_y, end_x, end_y):
     url = "https://naveropenapi.apigw.ntruss.com/map-direction/v1/driving"
+    # 🌟 수정 포인트: 네이버 서버가 안심하고 문을 열어주도록 Referer(출처)를 명시적으로 추가했습니다.
     headers = {
         "X-NCP-APIGW-API-KEY-ID": NAVER_CLIENT_ID,
-        "X-NCP-APIGW-API-KEY": NAVER_CLIENT_SECRET
+        "X-NCP-APIGW-API-KEY": NAVER_CLIENT_SECRET,
+        "Referer": "https://comebackhome-btgh69rtejofrpdwagcwmu.streamlit.app"
     }
     params = {
         "start": f"{start_x},{start_y}",
         "goal": f"{end_x},{end_y}",
-        "option": "traoptimal" # 실시간 최적 경로
+        "option": "traoptimal" 
     }
     
     try:
@@ -172,12 +172,14 @@ def get_naver_route(start_x, start_y, end_x, end_y):
             
             path = route['path']
             line_coords = [[coord[1], coord[0]] for coord in path]
-            segments = [{"coords": line_coords, "color": "#03C75A"}] # 네이버 전용 초록색 통일
+            segments = [{"coords": line_coords, "color": "#03C75A"}] 
             
             return distance_km, duration_min, segments
         else:
+            print(f"🔴 네이버 API 응답 에러: {data}")
             return None, None, []
     except Exception as e:
+        print(f"🔴 네이버 통신 실패: {e}")
         return None, None, []
 
 def format_time(duration_min):
