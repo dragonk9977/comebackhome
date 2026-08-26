@@ -102,13 +102,14 @@ def get_tmap_route(start_x, start_y, end_x, end_y):
     except:
         return None, None, []
 
-# --- 네이버 API 통신 (에러 진단 기능 추가) ---
+# --- 네이버 API 통신 ---
 def get_naver_route(start_x, start_y, end_x, end_y):
     url = "https://naveropenapi.apigw.ntruss.com/map-direction/v1/driving"
+    # 🌟 수정 포인트: 출입증(Referer)을 질문자님의 실제 앱 주소로 완벽하게 고정했습니다!
     headers = {
         "X-NCP-APIGW-API-KEY-ID": NAVER_CLIENT_ID,
         "X-NCP-APIGW-API-KEY": NAVER_CLIENT_SECRET,
-        "Referer": "http://localhost:8501" # 보안 통과를 위해 로컬호스트로 확실하게 고정
+        "Referer": "https://comebackhome-btgh69rtejofrpdwagcwmu.streamlit.app" 
     }
     params = {"start": f"{start_x},{start_y}", "goal": f"{end_x},{end_y}", "option": "traoptimal"}
     
@@ -116,7 +117,6 @@ def get_naver_route(start_x, start_y, end_x, end_y):
         res = requests.get(url, headers=headers, params=params)
         data = res.json()
         
-        # 정상 작동 시
         if data.get('code') == 0:
             route = data['route']['traoptimal'][0]
             distance_km = round(route['summary']['distance'] / 1000, 1)
@@ -126,8 +126,6 @@ def get_naver_route(start_x, start_y, end_x, end_y):
             segments = [{"coords": line_coords, "color": "#03C75A"}] 
             
             return distance_km, duration_min, segments, ""
-        
-        # 🌟 네이버 서버가 거절했을 때 거절 사유를 텍스트로 뽑아냅니다
         else:
             err_msg = data.get("error", {}).get("message") or data.get("message") or str(data)
             return None, None, [], f"거절 사유: {err_msg}"
@@ -218,8 +216,6 @@ if do_search:
             if start_x and end_x:
                 k_dist, k_dur, k_segments = get_kakao_route(start_x, start_y, end_x, end_y)
                 t_dist, t_dur, t_segments = get_tmap_route(start_x, start_y, end_x, end_y)
-                
-                # 🌟 네이버는 에러 메시지도 함께 받아옵니다
                 n_dist, n_dur, n_segments, n_err = get_naver_route(start_x, start_y, end_x, end_y)
                 
                 st.session_state.results = {
@@ -256,7 +252,7 @@ if st.session_state.show_results:
     tmap_link = f"tmap://route?goalname={safe_end_name}&goalx={e_x}&goaly={e_y}"
     c2.markdown(f'<a href="{tmap_link}" style="display: block; width: 100%; text-align: center; padding: 12px; background-color: #EF4C35; color: #FFFFFF; text-decoration: none; border-radius: 8px; font-weight: bold; margin-top: 10px; box-shadow: 0px 4px 6px rgba(0,0,0,0.1);">🔴 티맵 앱 열기</a>', unsafe_allow_html=True)
     
-    # 🟢 네이버 지도 (에러가 발생하면 에러 내용을 텍스트로 보여줍니다!)
+    # 🟢 네이버 지도 
     n_dist, n_dur, n_segments, n_err = res["naver"]
     if n_err:
         c3.metric(label="🟢 네이버 지도 (에러발생)", value="연결 오류", delta=n_err, delta_color="off")
