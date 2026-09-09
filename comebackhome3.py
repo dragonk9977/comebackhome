@@ -65,27 +65,36 @@ except:
 def render_kakao_map(center_lat, center_lng, route_segments, markers, map_key=0, height=400):
     route_js = json.dumps(route_segments)
     markers_js = json.dumps(markers)
-    # 🌟 카카오맵 무한로딩 완벽 해결: 스크립트 동적 주입(Dynamic Injection) 방식 사용
+    # 🌟 질문자님이 가져오셨던 '성공 코드'의 로딩 방식(정적 태그 + setTimeout 대기)을 100% 적용했습니다!
     html = f"""
     <!DOCTYPE html>
     <html>
     <head>
         <meta charset="utf-8">
-        <style> html, body {{ width: 100%; height: 100%; margin: 0; padding: 0; }} </style>
+        <style> 
+            html, body {{ width: 100%; height: 100%; margin: 0; padding: 0; background-color:#f8f9fa; }} 
+            #map {{ width: 100%; height: 100%; display: none; }}
+            #loading {{ width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; color: #888; font-size: 13px; }}
+        </style>
+        <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey={KAKAO_JS_KEY}&autoload=false" onload="onKakaoLoaded()" onerror="onKakaoError()"></script>
     </head>
     <body>
         <!-- Map Key: {map_key} -->
-        <div id="map" style="width:100%; height:100%; display:flex; justify-content:center; align-items:center; background-color:#f8f9fa;">
-            <span style="color:#888; font-size:13px;">카카오 지도를 불러오는 중입니다...</span>
-        </div>
+        <div id="loading">카카오 지도를 불러오는 중입니다...</div>
+        <div id="map"></div>
         <script>
-            function initKakaoMap() {{
-                var script = document.createElement('script');
-                script.src = "https://dapi.kakao.com/v2/maps/sdk.js?appkey={KAKAO_JS_KEY}&autoload=false";
-                script.onload = function() {{
+            function onKakaoError() {{
+                document.getElementById('loading').innerHTML = '<div style="color:red; font-weight:bold; text-align:center;">카카오맵 로딩 실패.<br>로컬 테스트 중이시라면 도메인에 http://localhost:8501 도 추가해주세요.</div>';
+            }}
+            
+            function onKakaoLoaded() {{
+                // 🌟 스트림릿 환경에서 kakao 객체가 완전히 초기화될 때까지 0.1초 강제 대기 (핵심 비법)
+                setTimeout(function() {{
                     kakao.maps.load(function() {{
+                        document.getElementById('loading').style.display = 'none';
                         var container = document.getElementById('map');
-                        container.innerHTML = ''; // 로딩 텍스트 지우기
+                        container.style.display = 'block';
+                        
                         var options = {{ center: new kakao.maps.LatLng({center_lat}, {center_lng}), level: 7 }};
                         var map = new kakao.maps.Map(container, options);
                         var bounds = new kakao.maps.LatLngBounds();
@@ -117,13 +126,8 @@ def render_kakao_map(center_lat, center_lng, route_segments, markers, map_key=0,
                         
                         if(hasBounds) {{ map.setBounds(bounds, 40, 40, 40, 40); }}
                     }});
-                }};
-                script.onerror = function() {{
-                    document.getElementById('map').innerHTML = '<div style="color:red; font-weight:bold;">카카오맵 로딩 실패. 도메인(Web 플랫폼) 설정을 확인해주세요.</div>';
-                }};
-                document.head.appendChild(script);
+                }}, 100);
             }}
-            window.onload = initKakaoMap;
         </script>
     </body>
     </html>
@@ -133,7 +137,6 @@ def render_kakao_map(center_lat, center_lng, route_segments, markers, map_key=0,
 def render_tmap(center_lat, center_lng, route_segments, markers, map_key=0, height=400):
     route_js = json.dumps(route_segments)
     markers_js = json.dumps(markers)
-    # 🌟 티맵은 요청하신 대로 기존 완벽 작동하던 코드를 100% 그대로 유지합니다.
     html = f"""
     <!DOCTYPE html>
     <html>
