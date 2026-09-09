@@ -48,7 +48,7 @@ custom_css = """
 st.markdown(custom_css, unsafe_allow_html=True)
 
 # ==========================================
-# 🔑 API 키 설정 (JS KEY 추가)
+# 🔑 API 키 설정
 # ==========================================
 try:
     KAKAO_API_KEY = st.secrets["KAKAO_API_KEY"]
@@ -60,9 +60,9 @@ except:
     KAKAO_JS_KEY = "42e54a502a4ea6b063acba6bbef6ff42"
 
 # ==========================================
-# 🗺️ [핵심] 순정 카카오 / 티맵 렌더링 함수
+# 🗺️ [핵심] 순정 카카오 / 티맵 렌더링 함수 (정위치 Key + 로딩 타이밍 수정)
 # ==========================================
-def render_kakao_map(center_lat, center_lng, route_segments, markers, height=400):
+def render_kakao_map(center_lat, center_lng, route_segments, markers, map_key=0, height=400):
     route_js = json.dumps(route_segments)
     markers_js = json.dumps(markers)
     html = f"""
@@ -71,51 +71,60 @@ def render_kakao_map(center_lat, center_lng, route_segments, markers, height=400
     <head>
         <meta charset="utf-8">
         <style> html, body {{ width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; }} #map {{ width: 100%; height: 100%; }} </style>
-        <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey={KAKAO_JS_KEY}&autoload=false"></script>
+        <script type="text/javascript" 
+                src="https://dapi.kakao.com/v2/maps/sdk.js?appkey={KAKAO_JS_KEY}&autoload=false" 
+                onload="initKakao()" 
+                onerror="document.getElementById('map').innerHTML = '<div style=\\'padding:20px; color:red; font-weight:bold;\\'>카카오맵 로딩 실패. 카카오 디벨로퍼스에 접속 주소(도메인)를 등록해주세요.</div>';">
+        </script>
     </head>
     <body>
+        <!-- 🌟 스트림릿 강제 리프레시를 위한 숨겨진 키 -->
+        <!-- Map Key: {map_key} -->
         <div id="map"></div>
         <script>
-            kakao.maps.load(function() {{
-                var container = document.getElementById('map');
-                var options = {{ center: new kakao.maps.LatLng({center_lat}, {center_lng}), level: 7 }};
-                var map = new kakao.maps.Map(container, options);
-                var bounds = new kakao.maps.LatLngBounds();
-                var hasBounds = false;
-                
-                function createMarker(color, text) {{
-                    var svg = `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30"><circle cx="15" cy="15" r="14" fill="${{color}}" stroke="white" stroke-width="2"/><text x="15" y="20" text-anchor="middle" font-size="12" font-weight="bold" fill="white">${{text}}</text></svg>`;
-                    return new kakao.maps.MarkerImage("data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg), new kakao.maps.Size(30, 30), {{offset: new kakao.maps.Point(15, 15)}});
-                }}
-
-                var routes = {route_js};
-                routes.forEach(function(seg) {{
-                    var path = [];
-                    seg.coords.forEach(function(c) {{
-                        var p = new kakao.maps.LatLng(c[0], c[1]);
-                        path.push(p); bounds.extend(p); hasBounds = true;
-                    }});
-                    if(path.length > 1) {{
-                        new kakao.maps.Polyline({{ map: map, path: path, strokeWeight: 5, strokeColor: seg.color, strokeOpacity: 0.9, strokeStyle: 'solid' }});
+            // 🌟 스크립트가 완전히 로드된 후 실행되도록 보장
+            function initKakao() {{
+                kakao.maps.load(function() {{
+                    var container = document.getElementById('map');
+                    var options = {{ center: new kakao.maps.LatLng({center_lat}, {center_lng}), level: 7 }};
+                    var map = new kakao.maps.Map(container, options);
+                    var bounds = new kakao.maps.LatLngBounds();
+                    var hasBounds = false;
+                    
+                    function createMarker(color, text) {{
+                        var svg = `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30"><circle cx="15" cy="15" r="14" fill="${{color}}" stroke="white" stroke-width="2"/><text x="15" y="20" text-anchor="middle" font-size="12" font-weight="bold" fill="white">${{text}}</text></svg>`;
+                        return new kakao.maps.MarkerImage("data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg), new kakao.maps.Size(30, 30), {{offset: new kakao.maps.Point(15, 15)}});
                     }}
+
+                    var routes = {route_js};
+                    routes.forEach(function(seg) {{
+                        var path = [];
+                        seg.coords.forEach(function(c) {{
+                            var p = new kakao.maps.LatLng(c[0], c[1]);
+                            path.push(p); bounds.extend(p); hasBounds = true;
+                        }});
+                        if(path.length > 1) {{
+                            new kakao.maps.Polyline({{ map: map, path: path, strokeWeight: 5, strokeColor: seg.color, strokeOpacity: 0.9, strokeStyle: 'solid' }});
+                        }}
+                    }});
+                    
+                    var markersData = {markers_js};
+                    markersData.forEach(function(m) {{
+                        var p = new kakao.maps.LatLng(m.coord[0], m.coord[1]);
+                        new kakao.maps.Marker({{ position: p, map: map, image: createMarker(m.color, m.text) }});
+                        bounds.extend(p); hasBounds = true;
+                    }});
+                    
+                    if(hasBounds) {{ map.setBounds(bounds, 40, 40, 40, 40); }}
                 }});
-                
-                var markersData = {markers_js};
-                markersData.forEach(function(m) {{
-                    var p = new kakao.maps.LatLng(m.coord[0], m.coord[1]);
-                    new kakao.maps.Marker({{ position: p, map: map, image: createMarker(m.color, m.text) }});
-                    bounds.extend(p); hasBounds = true;
-                }});
-                
-                if(hasBounds) {{ map.setBounds(bounds, 40, 40, 40, 40); }}
-            }});
+            }}
         </script>
     </body>
     </html>
     """
     components.html(html, height=height)
 
-def render_tmap(center_lat, center_lng, route_segments, markers, height=400):
+def render_tmap(center_lat, center_lng, route_segments, markers, map_key=0, height=400):
     route_js = json.dumps(route_segments)
     markers_js = json.dumps(markers)
     html = f"""
@@ -124,12 +133,14 @@ def render_tmap(center_lat, center_lng, route_segments, markers, height=400):
     <head>
         <meta charset="utf-8">
         <style> html, body {{ width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; }} #map {{ width: 100%; height: 100%; }} </style>
-        <script src="https://apis.openapi.sk.com/tmap/jsv2?version=1&appKey={TMAP_APP_KEY}"></script>
+        <script src="https://apis.openapi.sk.com/tmap/jsv2?version=1&appKey={TMAP_APP_KEY}" onload="initTmap()"></script>
     </head>
     <body>
+        <!-- 🌟 스트림릿 강제 리프레시를 위한 숨겨진 키 -->
+        <!-- Map Key: {map_key} -->
         <div id="map"></div>
         <script>
-            setTimeout(function() {{
+            function initTmap() {{
                 var map = new Tmapv2.Map("map", {{ center: new Tmapv2.LatLng({center_lat}, {center_lng}), zoom: 11 }});
                 var bounds = new Tmapv2.LatLngBounds();
                 var hasBounds = false;
@@ -156,7 +167,7 @@ def render_tmap(center_lat, center_lng, route_segments, markers, height=400):
                 }});
                 
                 if(hasBounds) {{ map.fitBounds(bounds); }}
-            }}, 300);
+            }}
         </script>
     </body>
     </html>
@@ -335,16 +346,15 @@ with tab1:
             {"coord": [res["ey"], res["ex"]], "color": "#FF0000", "text": "E"}
         ]
         
-        # 🌟 이제 카카오맵은 카카오맵으로, 티맵은 티맵으로 그립니다!
         with map_c1:
             st.caption("🗺️ 카카오내비 최적 경로 (순정 카카오맵)")
-            render_kakao_map(res["ey"], res["ex"], res["k_seg"], markers, height=400)
+            render_kakao_map(res["ey"], res["ex"], res["k_seg"], markers, map_key=st.session_state.map_key, height=400)
         with map_c2:
             st.caption("🗺️ 티맵 최적 경로 (순정 티맵)")
-            render_tmap(res["ey"], res["ex"], res["t_seg"], markers, height=400)
+            render_tmap(res["ey"], res["ex"], res["t_seg"], markers, map_key=st.session_state.map_key, height=400)
 
 # ------------------------------------------
-# 탭 2: 다중 출발지 승부 (🌟 카카오맵으로 4개 통일)
+# 탭 2: 다중 출발지 승부
 # ------------------------------------------
 with tab2:
     st.markdown("### 📍 어디서 출발하는게 가장 빠를까?")
@@ -412,34 +422,33 @@ with tab2:
                 if st.button("🔄 전체 지도 정위치", key="reset_map_2", use_container_width=True):
                     st.session_state.map_key += 1
 
-            # 🌟 통합 맵을 순정 카카오맵으로!
             markers = [{"coord": [ey, ex], "color": "#000000", "text": "E"}]
             all_k_segs = []
             for res in results:
                 markers.append({"coord": [res["sy"], res["sx"]], "color": res["color"], "text": f"{res['rank']}등"})
                 if res["k_seg"]:
-                    # 다중 경로 비교 시 색상을 고정 컬러로 바꿈
                     for s in res["k_seg"]: s["color"] = res["color"]
                     all_k_segs.extend(res["k_seg"])
                     
-            render_kakao_map(ey, ex, all_k_segs, markers, height=450)
+            render_kakao_map(ey, ex, all_k_segs, markers, map_key=st.session_state.map_key, height=450)
 
         st.markdown("<hr style='margin: 20px 0 10px 0;'>", unsafe_allow_html=True)
-        st.markdown("#### 🔍 후보지별 개별 상세 경로 (실시간 정체구간 반영)")
+        st.markdown("#### 🔍 후보지별 개별 상세 경로")
         
         indiv_cols = st.columns(len(results))
         for i, res in enumerate(results):
             with indiv_cols[i]:
                 st.markdown(f"**[{res['rank']}등]** {res['name']} 출발")
-                # 🌟 개별 맵들도 모두 카카오맵으로!
                 mks = [
                     {"coord": [ey, ex], "color": "#000000", "text": "E"},
                     {"coord": [res["sy"], res["sx"]], "color": "#1E90FF", "text": "S"}
                 ]
-                render_kakao_map(ey, ex, res["k_seg"], mks, height=300)
+                # 실시간 정체구간 반영을 위해 API 재호출하여 컬러 세그먼트 확보
+                _, _, fresh_seg = get_kakao_route(res["sx"], res["sy"], ex, ey)
+                render_kakao_map(ey, ex, fresh_seg, mks, map_key=f"{st.session_state.map_key}_{i}", height=300)
 
 # ------------------------------------------
-# 탭 3: 티맵 타임머신 (🌟 순정 카카오/티맵 동시 적용)
+# 탭 3: 티맵 타임머신
 # ------------------------------------------
 with tab3:
     st.markdown("### 🔮 몇 시에 출발해야 안 막힐까?")
@@ -574,10 +583,10 @@ with tab3:
             with map_c1:
                 st.caption("🗺️ 카카오내비 기준 경로 (순정 카카오맵)")
                 if res.get("k_seg"):
-                    render_kakao_map(res["ey"], res["ex"], res["k_seg"], markers, height=350)
+                    render_kakao_map(res["ey"], res["ex"], res["k_seg"], markers, map_key=st.session_state.map_key, height=350)
             with map_c2:
                 st.caption("🗺️ 티맵 기준 경로 (순정 티맵)")
                 if res.get("t_seg"):
-                    render_tmap(res["ey"], res["ex"], res["t_seg"], markers, height=350)
+                    render_tmap(res["ey"], res["ex"], res["t_seg"], markers, map_key=st.session_state.map_key, height=350)
         else:
             st.error(f"티맵 예측 데이터를 가져올 수 없습니다. (에러: {res['err']})")
