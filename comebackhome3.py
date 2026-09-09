@@ -6,7 +6,6 @@ import base64
 import os
 import urllib.parse
 import datetime
-import pandas as pd
 
 # ==========================================
 # 🖥️ 웹 페이지 기본 설정
@@ -38,7 +37,7 @@ custom_css = """
 
     .result-card {
         background: #ffffff; border: 1px solid #eaeaea; border-radius: 12px;
-        padding: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 12px;
+        padding: 12px 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 10px;
     }
     .rank-badge {
         color: white; padding: 4px 10px; border-radius: 20px; font-weight: 800; font-size: 12px; margin-right: 5px;
@@ -228,6 +227,7 @@ with tab1:
         start_icon = '<div style="background:#1E90FF; color:white; border-radius:50%; width:24px; height:24px; display:flex; justify-content:center; align-items:center; font-weight:bold; font-size:12px; border:2px solid white;">S</div>'
         end_icon = '<div style="background:#FF0000; color:white; border-radius:50%; width:24px; height:24px; display:flex; justify-content:center; align-items:center; font-weight:bold; font-size:12px; border:2px solid white;">E</div>'
         
+        # 🌟 1번 탭: 지도 여백을 타이트하게 조절하여 경로가 꽉 차게 보이게 만듭니다!
         with map_c1:
             st.caption("🗺️ 카카오내비 최적 경로")
             if res["k_seg"]:
@@ -236,7 +236,7 @@ with tab1:
                 folium.Marker(coords[0], icon=folium.DivIcon(html=start_icon)).add_to(m1)
                 folium.Marker(coords[-1], icon=folium.DivIcon(html=end_icon)).add_to(m1)
                 for s in res["k_seg"]: folium.PolyLine(locations=s['coords'], color=s['color'], weight=5, opacity=0.9).add_to(m1)
-                m1.fit_bounds(coords)
+                m1.fit_bounds(coords, padding=(20, 20)) # 🌟 타이트한 줌 적용!
                 st_folium(m1, use_container_width=True, height=400, key=f"m1_t1_{st.session_state.map_key}")
         with map_c2:
             st.caption("🗺️ 티맵 최적 경로")
@@ -246,11 +246,11 @@ with tab1:
                 folium.Marker(coords[0], icon=folium.DivIcon(html=start_icon)).add_to(m2)
                 folium.Marker(coords[-1], icon=folium.DivIcon(html=end_icon)).add_to(m2)
                 for s in res["t_seg"]: folium.PolyLine(locations=s['coords'], color=s['color'], weight=5, opacity=0.9).add_to(m2)
-                m2.fit_bounds(coords)
+                m2.fit_bounds(coords, padding=(20, 20)) # 🌟 타이트한 줌 적용!
                 st_folium(m2, use_container_width=True, height=400, key=f"m2_t1_{st.session_state.map_key}")
 
 # ------------------------------------------
-# 탭 2: 다중 출발지 승부 
+# 탭 2: 다중 출발지 승부 (비율 조정 및 타이트 줌)
 # ------------------------------------------
 with tab2:
     st.markdown("### 📍 어디서 출발하는게 가장 빠를까?")
@@ -290,19 +290,20 @@ with tab2:
         results = res_data["results"]
         ex, ey = res_data["ex"], res_data["ey"]
         
-        c_left, c_right = st.columns([1, 2.5])
+        # 🌟 2번 탭 레이아웃 1:2.5 -> 1:3으로 조정하여 지도를 더 시원하게 씁니다!
+        c_left, c_right = st.columns([1, 3])
         
         with c_left:
             st.markdown("#### 🏆 순위 결과")
             for res in results:
                 rank, badge_color = res["rank"], res["color"]
                 st.markdown(f"""
-                <div class="result-card" style="border-left: 5px solid {badge_color};">
-                    <div style="margin-bottom: 8px;">
-                        <span class="rank-badge" style="background:{badge_color};">현재 {rank}등</span>
-                        <strong style="font-size: 15px;">{res['name']}</strong>
+                <div class="result-card" style="border-left: 5px solid {badge_color}; padding: 12px;">
+                    <div style="margin-bottom: 5px;">
+                        <span class="rank-badge" style="background:{badge_color}; padding: 3px 8px;">{rank}등</span>
+                        <strong style="font-size: 14px;">{res['name']}</strong>
                     </div>
-                    <div style="font-size: 14px; color: #333;">
+                    <div style="font-size: 13px; color: #333; margin-left:2px;">
                         🟡 카카오: <b>{format_time(res['kakao'])}</b> <br> 🔴 티맵: <b>{format_time(res['tmap'])}</b>
                     </div>
                 </div>
@@ -330,11 +331,12 @@ with tab2:
                         all_coords_multi.extend(s['coords'])
             
             if all_coords_multi:
-                m_multi.fit_bounds(all_coords_multi)
+                # 🌟 다중 경로 지도에도 타이트한 줌 적용!
+                m_multi.fit_bounds(all_coords_multi, padding=(30, 30))
             st_folium(m_multi, use_container_width=True, height=500, key=f"m_multi_t2_{st.session_state.map_key}")
 
 # ------------------------------------------
-# 탭 3: 티맵 타임머신 (🌟 높이 정렬 및 로딩 애니메이션 추가)
+# 탭 3: 티맵 타임머신 (5번째 카드 높이 밸런스 완벽 일치)
 # ------------------------------------------
 with tab3:
     st.markdown("### 🔮 몇 시에 출발해야 안 막힐까?")
@@ -403,17 +405,17 @@ with tab3:
             st.success(f"💡 **가장 쾌적한 추천 시간:** {res['times'][best_idx]}에 출발하시면 약 {format_time(min_time)}이 소요됩니다!")
             st.markdown("#### ⏳ 시간대별 흐름 & 내 스케줄 비교")
             
-            # 🌟 5개 카드의 높이를 완벽하게 통일하기 위해 flex CSS 구조 적용!
             cols = st.columns(5)
             
+            # 1~4번째 카드 렌더링 (높이 165px 고정)
             for i, (label, mins) in enumerate(zip(res["times"], res["durations"])):
                 is_best = (i == best_idx)
                 bg_color = "#FFF4F4" if is_best else "#F8F9FA"
                 border_color = "#FF4B4B" if is_best else "#EAEAEA"
-                badge = '<div style="background:#FF4B4B; color:white; font-size:12px; font-weight:bold; border-radius:20px; padding:3px 10px; display:inline-block; margin-bottom:12px;">🏆 최적 추천</div>' if is_best else '<div style="height:26px; margin-bottom:12px;"></div>'
+                badge = '<div style="background:#FF4B4B; color:white; font-size:12px; font-weight:bold; border-radius:20px; padding:3px 10px; display:inline-block; margin-bottom:15px;">🏆 최적 추천</div>' if is_best else '<div style="height:26px; margin-bottom:15px;"></div>'
 
                 card_html = f"""
-                <div style="background:{bg_color}; border:2px solid {border_color}; border-radius:12px; padding:20px 5px; text-align:center; height: 160px; display: flex; flex-direction: column; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+                <div style="background:{bg_color}; border:2px solid {border_color}; border-radius:12px; padding:15px 5px; text-align:center; height: 165px; display: flex; flex-direction: column; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
                     {badge}
                     <div style="font-size:13px; color:#555; margin-bottom:10px; font-weight:600;">{label}</div>
                     <div style="font-size:22px; font-weight:800; color:#111;">{format_time(mins)}</div>
@@ -421,8 +423,11 @@ with tab3:
                 """
                 cols[i].markdown(card_html, unsafe_allow_html=True)
                 
+            # 🌟 5번째 카드 렌더링 (내부 높이 합계를 1~4번 카드와 165px로 완벽히 맞춤!)
             with cols[4]:
-                st.markdown("<div style='text-align:center; font-weight:bold; color:#1E90FF; margin-bottom:6px; font-size:14px;'>⏰ 스케줄 변경 (10분 단위)</div>", unsafe_allow_html=True)
+                st.markdown("""
+                <div style="text-align:center; font-weight:bold; color:#1E90FF; margin-bottom:0px; font-size:13px; height: 26px; line-height: 26px;">⏰ 스케줄 조절 (10분 단위)</div>
+                """, unsafe_allow_html=True)
                 
                 time_options = [f"{h:02d}:{m:02d}" for h in range(24) for m in range(0, 60, 10)]
                 default_time_str = f"{st.session_state.custom_h:02d}:{st.session_state.custom_m:02d}"
@@ -441,7 +446,6 @@ with tab3:
                 if kst_now > target_dt: target_dt += datetime.timedelta(days=1)
                 custom_time_str = target_dt.strftime("%Y-%m-%dT%H:%M:%S+0900")
                 
-                # 🌟 시간 선택 시 돌아가는 로딩 애니메이션 추가!
                 with st.spinner("⏳ 갱신 중..."):
                     c_mins, _ = get_tmap_prediction(res["sx"], res["sy"], res["ex"], res["ey"], custom_time_str)
                 
