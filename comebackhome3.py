@@ -113,7 +113,7 @@ def get_tmap_prediction(start_x, start_y, end_x, end_y, time_str):
     }
     try:
         res = requests.post(url, headers=headers, json=payload)
-        if res.status_code != 200: return None, f"티맵 서버 에러 (코드: {res.status_code})"
+        if res.status_code != 200: return None, f"티맵 에러 (코드: {res.status_code})"
         data = res.json()
         if 'features' in data: return round(data['features'][0]['properties']['totalTime'] / 60), ""
         else: return None, str(data)
@@ -125,14 +125,17 @@ def format_time(mins):
     return f"{h}시간 {m}분" if h > 0 else f"{m}분"
 
 # ==========================================
-# 🌟 세션 초기화
+# 🌟 세션 초기화 (타임머신 드롭다운 연동)
 # ==========================================
+kst_now = datetime.datetime.utcnow() + datetime.timedelta(hours=9)
+
 if "t1_res" not in st.session_state: st.session_state.t1_res = None
 if "t2_res" not in st.session_state: st.session_state.t2_res = None
 if "t3_res" not in st.session_state: st.session_state.t3_res = None
 if "map_key" not in st.session_state: st.session_state.map_key = 0 
 if "custom_h" not in st.session_state: st.session_state.custom_h = 5
 if "custom_m" not in st.session_state: st.session_state.custom_m = 0
+if "prev_r3" not in st.session_state: st.session_state.prev_r3 = "1️⃣ 출근길 (집 ➔ 회사)"
 
 # ==========================================
 # 🖥️ 사이드바
@@ -164,10 +167,9 @@ if work_address: st.query_params["work"] = work_address
 st.markdown("---")
 
 # ==========================================
-# 🚀 3개의 탭
+# 🚀 3개의 탭 기능 분리
 # ==========================================
 tab1, tab2, tab3 = st.tabs(["🗺️ 1:1 실시간 경로", "📍 다중 출발지 승부", "🔮 시간대별 타임머신"])
-kst_now = datetime.datetime.utcnow() + datetime.timedelta(hours=9)
 google_tiles = "https://mt1.google.com/vt/lyrs=m&hl=ko&x={x}&y={y}&z={z}"
 
 # ------------------------------------------
@@ -332,7 +334,7 @@ with tab2:
             st_folium(m_multi, use_container_width=True, height=500, key=f"m_multi_t2_{st.session_state.map_key}")
 
 # ------------------------------------------
-# 탭 3: 티맵 타임머신 (🌟 시계 설정 통합)
+# 탭 3: 티맵 타임머신 (🌟 드롭다운 방식 UI 완벽 적용)
 # ------------------------------------------
 with tab3:
     st.markdown("### 🔮 몇 시에 출발해야 안 막힐까?")
@@ -340,21 +342,22 @@ with tab3:
     
     route_choice3 = st.radio("🚗 타임머신 경로 선택", ["1️⃣ 출근길 (집 ➔ 회사)", "2️⃣ 퇴근길 (회사 ➔ 집)", "3️⃣ 직접 설정"], index=0 if kst_now.hour < 12 else 1, horizontal=True, key="r3")
     
+    # 🌟 라디오 버튼이 바뀌면 세션에 저장된 드롭다운 기본값(시간)도 같이 갱신해 줍니다!
+    if st.session_state.prev_r3 != route_choice3:
+        st.session_state.prev_r3 = route_choice3
+        if route_choice3.startswith("1️⃣"): 
+            st.session_state.custom_h, st.session_state.custom_m = 5, 0
+        elif route_choice3.startswith("2️⃣"): 
+            st.session_state.custom_h, st.session_state.custom_m = 17, 30
+        else:
+            st.session_state.custom_h, st.session_state.custom_m = kst_now.hour, (kst_now.minute // 10) * 10
+
     is_custom3 = False
-    if route_choice3.startswith("1️⃣"): 
-        start_target3, end_target3 = home_address, work_address
-        def_h, def_m = 5, 0
-    elif route_choice3.startswith("2️⃣"): 
-        start_target3, end_target3 = work_address, home_address
-        def_h, def_m = 17, 30
+    if route_choice3.startswith("1️⃣"): start_target3, end_target3 = home_address, work_address
+    elif route_choice3.startswith("2️⃣"): start_target3, end_target3 = work_address, home_address
     else:
         is_custom3 = True
         start_target3, end_target3 = "", ""
-        def_h, def_m = kst_now.hour, kst_now.minute
-
-    # 라디오 버튼 변경 시 세션 시계 업데이트
-    st.session_state.custom_h = def_h
-    st.session_state.custom_m = def_m
 
     if is_custom3:
         ct3, ct4 = st.columns(2)
@@ -363,7 +366,7 @@ with tab3:
     else:
         st.info(f"📍 **예측 경로:** {start_target3 if start_target3 else '(집 미입력)'} ➔ {end_target3 if end_target3 else '(회사 미입력)'}")
 
-    if st.button("시간대별 예측 조회하기", type="primary", key="btn3", use_container_width=True):
+    if st.button("시간대별 일괄 예측 조회하기", type="primary", key="btn3", use_container_width=True):
         if not start_target3 or not end_target3:
             st.warning("출발지와 도착지를 모두 정확히 설정해 주세요.")
         else:
@@ -385,7 +388,6 @@ with tab3:
                             durations.append(pred_mins)
                         if err: err_log = err
                     
-                    # 🌟 세션에 기본 주소 정보와 예측 데이터 저장
                     st.session_state.t3_res = {
                         "sx": sx, "sy": sy, "ex": ex, "ey": ey,
                         "times": times, "durations": durations, "err": err_log
@@ -402,9 +404,9 @@ with tab3:
             st.success(f"💡 **가장 쾌적한 추천 시간:** {res['times'][best_idx]}에 출발하시면 약 {format_time(min_time)}이 소요됩니다!")
             st.markdown("#### ⏳ 시간대별 흐름 & 내 스케줄 비교")
             
-            # 🌟 5개의 카드를 배치합니다. (4개: 고정, 1개: 실시간 변경 시계)
             cols = st.columns(5)
             
+            # 1~4번째 칸: 자동 예측 렌더링
             for i, (label, mins) in enumerate(zip(res["times"], res["durations"])):
                 is_best = (i == best_idx)
                 bg_color = "#FFF4F4" if is_best else "#F8F9FA"
@@ -420,36 +422,43 @@ with tab3:
                 """
                 cols[i].markdown(card_html, unsafe_allow_html=True)
                 
-            # 🌟 마지막 5번째 컬럼: 맘대로 조절 가능한 [지정 스케줄] 시계 카드!
+            # 🌟 5번째 칸: 시간 변경 드롭다운(selectbox) 통합 완벽 적용!
             with cols[4]:
-                st.markdown("""
-                <div style="background:#E8F0FE; border:2px solid #1E90FF; border-radius:12px 12px 0 0; padding:10px 5px 0 5px; text-align:center;">
-                    <div style="background:#1E90FF; color:white; font-size:12px; font-weight:bold; border-radius:20px; padding:3px 10px; display:inline-block; margin-bottom:5px;">⏰ 지정 스케줄</div>
-                </div>
-                """, unsafe_allow_html=True)
+                st.markdown("<div style='text-align:center; font-weight:bold; color:#1E90FF; margin-bottom:10px; font-size:15px;'>⏰ 스케줄 조절 (10분 단위)</div>", unsafe_allow_html=True)
                 
-                # 사용자가 시간을 바꿀 수 있는 입력창을 카드 안에 쏙 넣음
-                custom_time = st.time_input("시간 변경 시 즉시 갱신", value=datetime.time(st.session_state.custom_h, st.session_state.custom_m), label_visibility="collapsed")
+                # 10분 단위 시간 목록 생성 (00:00 ~ 23:50)
+                time_options = [f"{h:02d}:{m:02d}" for h in range(24) for m in range(0, 60, 10)]
+                default_time_str = f"{st.session_state.custom_h:02d}:{st.session_state.custom_m:02d}"
                 
-                # 시간이 바뀌면 즉시 API 호출하여 하단에 결과 표시
-                target_dt = kst_now.replace(hour=custom_time.hour, minute=custom_time.minute, second=0, microsecond=0)
+                # 만약 지정된 시간이 10분 단위로 떨어지지 않는다면 옵션에 강제 추가
+                if default_time_str not in time_options:
+                    time_options.append(default_time_str)
+                    time_options.sort()
+                    
+                # 스트림릿 고유의 깔끔한 드롭다운 UI 
+                selected_time = st.selectbox("시간을 선택하면 갱신됩니다", time_options, index=time_options.index(default_time_str), label_visibility="collapsed")
+                
+                # 선택한 시간을 세션에 업데이트
+                sel_h, sel_m = map(int, selected_time.split(":"))
+                st.session_state.custom_h = sel_h
+                st.session_state.custom_m = sel_m
+                
+                target_dt = kst_now.replace(hour=sel_h, minute=sel_m, second=0, microsecond=0)
                 if kst_now > target_dt: target_dt += datetime.timedelta(days=1)
                 custom_time_str = target_dt.strftime("%Y-%m-%dT%H:%M:%S+0900")
                 
+                # 드롭다운으로 선택된 시간만 개별적으로 티맵에 요청 (1초 컷)
                 c_mins, _ = get_tmap_prediction(res["sx"], res["sy"], res["ex"], res["ey"], custom_time_str)
                 
                 if c_mins:
                     st.markdown(f"""
-                    <div style="background:#E8F0FE; border-left:2px solid #1E90FF; border-right:2px solid #1E90FF; border-bottom:2px solid #1E90FF; border-radius:0 0 12px 12px; padding:0 5px 20px 5px; text-align:center; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+                    <div style="background:#E8F0FE; border:2px solid #1E90FF; border-radius:12px; padding:15px 5px; text-align:center; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-top:5px;">
+                        <div style="font-size:13px; color:#1E90FF; margin-bottom:5px; font-weight:600;">{target_dt.strftime('%m/%d')} 예상 소요시간</div>
                         <div style="font-size:22px; font-weight:800; color:#111;">{format_time(c_mins)}</div>
                     </div>
                     """, unsafe_allow_html=True)
                 else:
-                    st.markdown(f"""
-                    <div style="background:#E8F0FE; border-left:2px solid #1E90FF; border-right:2px solid #1E90FF; border-bottom:2px solid #1E90FF; border-radius:0 0 12px 12px; padding:0 5px 20px 5px; text-align:center;">
-                        <div style="font-size:15px; font-weight:800; color:#FF0000;">예측 실패</div>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    st.error("예측 실패")
                 
         else:
             st.error(f"티맵 예측 데이터를 가져올 수 없습니다. (에러: {res['err']})")
