@@ -509,7 +509,7 @@ setDebug(
 </html>
 """
 
-```python
+
     # 디버그: Python 함수가 실제로 여기까지 실행되는지 확인
     st.error("🔥 render_kakao_map() 함수까지 실행됨")
 
@@ -518,5 +518,5 @@ setDebug(
         height=height,
         scrolling=False
     )
-```
+
 
