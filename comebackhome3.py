@@ -6,6 +6,7 @@ import base64
 import os
 import urllib.parse
 import datetime
+import pandas as pd
 
 # ==========================================
 # 🖥️ 웹 페이지 기본 설정
@@ -37,7 +38,7 @@ custom_css = """
 
     .result-card {
         background: #ffffff; border: 1px solid #eaeaea; border-radius: 12px;
-        padding: 12px 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 10px;
+        padding: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 12px;
     }
     .rank-badge {
         color: white; padding: 4px 10px; border-radius: 20px; font-weight: 800; font-size: 12px; margin-right: 5px;
@@ -170,6 +171,9 @@ st.markdown("---")
 # ==========================================
 tab1, tab2, tab3 = st.tabs(["🗺️ 1:1 실시간 경로", "📍 다중 출발지 승부", "🔮 시간대별 타임머신"])
 google_tiles = "https://mt1.google.com/vt/lyrs=m&hl=ko&x={x}&y={y}&z={z}"
+# 🌟 공통 아이콘 설정
+start_icon = '<div style="background:#1E90FF; color:white; border-radius:50%; width:24px; height:24px; display:flex; justify-content:center; align-items:center; font-weight:bold; font-size:12px; border:2px solid white;">S</div>'
+end_icon = '<div style="background:#FF0000; color:white; border-radius:50%; width:24px; height:24px; display:flex; justify-content:center; align-items:center; font-weight:bold; font-size:12px; border:2px solid white;">E</div>'
 
 # ------------------------------------------
 # 탭 1: 기존 1:1 실시간 경로
@@ -224,10 +228,7 @@ with tab1:
             st.session_state.map_key += 1
             
         map_c1, map_c2 = st.columns(2)
-        start_icon = '<div style="background:#1E90FF; color:white; border-radius:50%; width:24px; height:24px; display:flex; justify-content:center; align-items:center; font-weight:bold; font-size:12px; border:2px solid white;">S</div>'
-        end_icon = '<div style="background:#FF0000; color:white; border-radius:50%; width:24px; height:24px; display:flex; justify-content:center; align-items:center; font-weight:bold; font-size:12px; border:2px solid white;">E</div>'
         
-        # 🌟 1번 탭: 지도 여백을 타이트하게 조절하여 경로가 꽉 차게 보이게 만듭니다!
         with map_c1:
             st.caption("🗺️ 카카오내비 최적 경로")
             if res["k_seg"]:
@@ -236,7 +237,7 @@ with tab1:
                 folium.Marker(coords[0], icon=folium.DivIcon(html=start_icon)).add_to(m1)
                 folium.Marker(coords[-1], icon=folium.DivIcon(html=end_icon)).add_to(m1)
                 for s in res["k_seg"]: folium.PolyLine(locations=s['coords'], color=s['color'], weight=5, opacity=0.9).add_to(m1)
-                m1.fit_bounds(coords, padding=(20, 20)) # 🌟 타이트한 줌 적용!
+                m1.fit_bounds(coords, padding=(10, 10)) # 🌟 초밀착 줌업!
                 st_folium(m1, use_container_width=True, height=400, key=f"m1_t1_{st.session_state.map_key}")
         with map_c2:
             st.caption("🗺️ 티맵 최적 경로")
@@ -246,11 +247,11 @@ with tab1:
                 folium.Marker(coords[0], icon=folium.DivIcon(html=start_icon)).add_to(m2)
                 folium.Marker(coords[-1], icon=folium.DivIcon(html=end_icon)).add_to(m2)
                 for s in res["t_seg"]: folium.PolyLine(locations=s['coords'], color=s['color'], weight=5, opacity=0.9).add_to(m2)
-                m2.fit_bounds(coords, padding=(20, 20)) # 🌟 타이트한 줌 적용!
+                m2.fit_bounds(coords, padding=(10, 10)) # 🌟 초밀착 줌업!
                 st_folium(m2, use_container_width=True, height=400, key=f"m2_t1_{st.session_state.map_key}")
 
 # ------------------------------------------
-# 탭 2: 다중 출발지 승부 (비율 조정 및 타이트 줌)
+# 탭 2: 다중 출발지 승부 (🌟 개별 지도 3개 추가!)
 # ------------------------------------------
 with tab2:
     st.markdown("### 📍 어디서 출발하는게 가장 빠를까?")
@@ -271,10 +272,14 @@ with tab2:
                     if s_addr.strip():
                         sx, sy = get_kakao_coords(s_addr)
                         if sx:
-                            _, k_dur, _ = get_kakao_route(sx, sy, ex, ey)
+                            # 🌟 개별 지도를 위해 세그먼트 데이터도 미리 가져와서 통째로 저장합니다!
+                            _, k_dur, k_seg = get_kakao_route(sx, sy, ex, ey)
                             _, t_dur, _ = get_tmap_route(sx, sy, ex, ey)
                             avg_dur = ((k_dur or 0) + (t_dur or 0)) / 2
-                            results.append({"name": s_addr, "sx":sx, "sy":sy, "kakao": k_dur, "tmap": t_dur, "avg": avg_dur})
+                            results.append({
+                                "name": s_addr, "sx":sx, "sy":sy, 
+                                "kakao": k_dur, "tmap": t_dur, "avg": avg_dur, "k_seg": k_seg
+                            })
                 
                 if results:
                     results = sorted(results, key=lambda x: x["avg"])
@@ -290,7 +295,6 @@ with tab2:
         results = res_data["results"]
         ex, ey = res_data["ex"], res_data["ey"]
         
-        # 🌟 2번 탭 레이아웃 1:2.5 -> 1:3으로 조정하여 지도를 더 시원하게 씁니다!
         c_left, c_right = st.columns([1, 3])
         
         with c_left:
@@ -311,32 +315,51 @@ with tab2:
                 
         with c_right:
             c_title, c_btn = st.columns([1, 1])
-            with c_title: st.markdown("#### 🗺️ 순위별 경로 비교 지도")
+            with c_title: st.markdown("#### 🗺️ 1~3등 전체 비교 지도")
             with c_btn:
-                if st.button("🔄 지도 정위치로 되돌리기", key="reset_map_2", use_container_width=True):
+                if st.button("🔄 전체 지도 정위치", key="reset_map_2", use_container_width=True):
                     st.session_state.map_key += 1
 
             m_multi = folium.Map(location=[float(ey), float(ex)], zoom_start=11, tiles=google_tiles, attr="Google")
-            end_icon = '<div style="background:#000000; color:white; border-radius:50%; width:26px; height:26px; display:flex; justify-content:center; align-items:center; font-weight:bold; font-size:10px; border:2px solid white;">도착</div>'
             folium.Marker([float(ey), float(ex)], icon=folium.DivIcon(html=end_icon)).add_to(m_multi)
             
             all_coords_multi = []
             for res in results:
-                _, _, segs = get_kakao_route(res["sx"], res["sy"], ex, ey, solid_color=res["color"])
-                if segs:
+                if res["k_seg"]:
                     s_icon = f'<div style="background:{res["color"]}; color:white; border-radius:20px; padding:3px 8px; display:flex; justify-content:center; align-items:center; font-weight:bold; font-size:12px; border:2px solid white; white-space:nowrap;">{res["rank"]}등 출발</div>'
                     folium.Marker([float(res["sy"]), float(res["sx"])], icon=folium.DivIcon(html=s_icon)).add_to(m_multi)
-                    for s in segs: 
-                        folium.PolyLine(locations=s['coords'], color=s['color'], weight=5, opacity=0.8).add_to(m_multi)
+                    # 통합 지도에서는 각 순위별 단색(빨,파,초)으로 선을 그어 줍니다
+                    for s in res["k_seg"]: 
+                        folium.PolyLine(locations=s['coords'], color=res['color'], weight=5, opacity=0.8).add_to(m_multi)
                         all_coords_multi.extend(s['coords'])
             
-            if all_coords_multi:
-                # 🌟 다중 경로 지도에도 타이트한 줌 적용!
-                m_multi.fit_bounds(all_coords_multi, padding=(30, 30))
-            st_folium(m_multi, use_container_width=True, height=500, key=f"m_multi_t2_{st.session_state.map_key}")
+            if all_coords_multi: m_multi.fit_bounds(all_coords_multi, padding=(10, 10)) # 초밀착 줌
+            st_folium(m_multi, use_container_width=True, height=450, key=f"m_multi_t2_{st.session_state.map_key}")
+
+        # 🌟 그 아래에 개별 출발지별 상세 지도 나란히 배치!
+        st.markdown("<hr style='margin: 20px 0 10px 0;'>", unsafe_allow_html=True)
+        st.markdown("#### 🔍 후보지별 개별 상세 경로 (실시간 정체구간 반영)")
+        
+        indiv_cols = st.columns(len(results))
+        for i, res in enumerate(results):
+            with indiv_cols[i]:
+                st.markdown(f"**[{res['rank']}등]** {res['name']} 출발")
+                m_indiv = folium.Map(location=[float(ey), float(ex)], zoom_start=11, tiles=google_tiles, attr="Google")
+                folium.Marker([float(ey), float(ex)], icon=folium.DivIcon(html=end_icon)).add_to(m_indiv)
+                folium.Marker([float(res["sy"]), float(res["sx"])], icon=folium.DivIcon(html=start_icon)).add_to(m_indiv)
+                
+                coords_indiv = []
+                if res["k_seg"]:
+                    for s in res["k_seg"]:
+                        # 개별 지도에서는 고유 색상이 아닌 '빨/노/초' 실시간 교통량 색상으로 그려줍니다!
+                        folium.PolyLine(locations=s['coords'], color=s['color'], weight=5, opacity=0.9).add_to(m_indiv)
+                        coords_indiv.extend(s['coords'])
+                        
+                if coords_indiv: m_indiv.fit_bounds(coords_indiv, padding=(10, 10))
+                st_folium(m_indiv, use_container_width=True, height=300, key=f"m_indiv_t2_{res['rank']}_{st.session_state.map_key}")
 
 # ------------------------------------------
-# 탭 3: 티맵 타임머신 (5번째 카드 높이 밸런스 완벽 일치)
+# 탭 3: 티맵 타임머신 (🌟 지도 표출 완벽 반영)
 # ------------------------------------------
 with tab3:
     st.markdown("### 🔮 몇 시에 출발해야 안 막힐까?")
@@ -378,6 +401,10 @@ with tab3:
                     times, durations = [], []
                     err_log = ""
                     
+                    # 🌟 타임머신 탭에서도 기준 경로를 보여주기 위해 세그먼트를 가져와 저장합니다.
+                    _, _, k_seg = get_kakao_route(sx, sy, ex, ey)
+                    _, _, t_seg = get_tmap_route(sx, sy, ex, ey)
+                    
                     for i in range(4):
                         target_time = kst_now + datetime.timedelta(hours=i)
                         time_str = target_time.strftime("%Y-%m-%dT%H:%M:%S+0900") 
@@ -391,6 +418,7 @@ with tab3:
                     
                     st.session_state.t3_res = {
                         "sx": sx, "sy": sy, "ex": ex, "ey": ey,
+                        "k_seg": k_seg, "t_seg": t_seg,
                         "times": times, "durations": durations, "err": err_log
                     }
                 else: 
@@ -406,8 +434,6 @@ with tab3:
             st.markdown("#### ⏳ 시간대별 흐름 & 내 스케줄 비교")
             
             cols = st.columns(5)
-            
-            # 1~4번째 카드 렌더링 (높이 165px 고정)
             for i, (label, mins) in enumerate(zip(res["times"], res["durations"])):
                 is_best = (i == best_idx)
                 bg_color = "#FFF4F4" if is_best else "#F8F9FA"
@@ -423,21 +449,16 @@ with tab3:
                 """
                 cols[i].markdown(card_html, unsafe_allow_html=True)
                 
-            # 🌟 5번째 카드 렌더링 (내부 높이 합계를 1~4번 카드와 165px로 완벽히 맞춤!)
             with cols[4]:
-                st.markdown("""
-                <div style="text-align:center; font-weight:bold; color:#1E90FF; margin-bottom:0px; font-size:13px; height: 26px; line-height: 26px;">⏰ 스케줄 조절 (10분 단위)</div>
-                """, unsafe_allow_html=True)
+                st.markdown("<div style='text-align:center; font-weight:bold; color:#1E90FF; margin-bottom:0px; font-size:13px; height: 26px; line-height: 26px;'>⏰ 스케줄 조절 (10분 단위)</div>", unsafe_allow_html=True)
                 
                 time_options = [f"{h:02d}:{m:02d}" for h in range(24) for m in range(0, 60, 10)]
                 default_time_str = f"{st.session_state.custom_h:02d}:{st.session_state.custom_m:02d}"
-                
                 if default_time_str not in time_options:
                     time_options.append(default_time_str)
                     time_options.sort()
                     
                 selected_time = st.selectbox("시간", time_options, index=time_options.index(default_time_str), label_visibility="collapsed")
-                
                 sel_h, sel_m = map(int, selected_time.split(":"))
                 st.session_state.custom_h = sel_h
                 st.session_state.custom_m = sel_m
@@ -456,8 +477,36 @@ with tab3:
                         <div style="font-size:22px; font-weight:800; color:#111;">{format_time(c_mins)}</div>
                     </div>
                     """, unsafe_allow_html=True)
-                else:
-                    st.error("예측 실패")
+                else: st.error("예측 실패")
                 
+            # 🌟 타임머신 하단에 예측의 기준이 되는 경로 지도 2개 표출!
+            st.markdown("<hr style='margin: 20px 0 10px 0;'>", unsafe_allow_html=True)
+            c_title, c_btn = st.columns([1, 1])
+            with c_title: st.markdown("#### 🗺️ 예측 기준 경로 (실시간)")
+            with c_btn:
+                if st.button("🔄 기준 지도 정위치", key="reset_map_3", use_container_width=True):
+                    st.session_state.map_key += 1
+                    
+            map_c1, map_c2 = st.columns(2)
+            with map_c1:
+                st.caption("🗺️ 카카오내비 기준 경로")
+                if res.get("k_seg"):
+                    coords = [c for s in res["k_seg"] for c in s['coords']]
+                    m1 = folium.Map(location=coords[len(coords)//2], zoom_start=11, tiles=google_tiles, attr="Google")
+                    folium.Marker(coords[0], icon=folium.DivIcon(html=start_icon)).add_to(m1)
+                    folium.Marker(coords[-1], icon=folium.DivIcon(html=end_icon)).add_to(m1)
+                    for s in res["k_seg"]: folium.PolyLine(locations=s['coords'], color=s['color'], weight=5, opacity=0.9).add_to(m1)
+                    m1.fit_bounds(coords, padding=(10, 10)) # 🌟 초밀착 줌업!
+                    st_folium(m1, use_container_width=True, height=350, key=f"m1_t3_{st.session_state.map_key}")
+            with map_c2:
+                st.caption("🗺️ 티맵 기준 경로")
+                if res.get("t_seg"):
+                    coords = [c for s in res["t_seg"] for c in s['coords']]
+                    m2 = folium.Map(location=coords[len(coords)//2], zoom_start=11, tiles=google_tiles, attr="Google")
+                    folium.Marker(coords[0], icon=folium.DivIcon(html=start_icon)).add_to(m2)
+                    folium.Marker(coords[-1], icon=folium.DivIcon(html=end_icon)).add_to(m2)
+                    for s in res["t_seg"]: folium.PolyLine(locations=s['coords'], color=s['color'], weight=5, opacity=0.9).add_to(m2)
+                    m2.fit_bounds(coords, padding=(10, 10)) # 🌟 초밀착 줌업!
+                    st_folium(m2, use_container_width=True, height=350, key=f"m2_t3_{st.session_state.map_key}")
         else:
             st.error(f"티맵 예측 데이터를 가져올 수 없습니다. (에러: {res['err']})")
