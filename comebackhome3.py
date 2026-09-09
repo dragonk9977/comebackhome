@@ -6,7 +6,6 @@ import base64
 import os
 import urllib.parse
 import datetime
-import pandas as pd
 
 # ==========================================
 # 🖥️ 웹 페이지 기본 설정
@@ -102,37 +101,22 @@ def get_tmap_route(start_x, start_y, end_x, end_y):
     return None, None, []
 
 def get_tmap_prediction(start_x, start_y, end_x, end_y, time_str):
-    """🌟 버그 픽스: 티맵 예측 API 전용 3중 중첩 JSON 구조 완벽 적용!"""
     url = "https://apis.openapi.sk.com/tmap/routes/prediction?version=1&reqCoordType=WGS84GEO&resCoordType=WGS84GEO"
     headers = {"appKey": TMAP_APP_KEY, "Content-Type": "application/json"}
     payload = {
         "routesInfo": {
-            "departure": {
-                "name": "출발지",
-                "lon": str(start_x),
-                "lat": str(start_y)
-            },
-            "destination": {
-                "name": "도착지",
-                "lon": str(end_x),
-                "lat": str(end_y)
-            },
-            "predictionType": "departure", 
-            "predictionTime": time_str
+            "departure": {"name": "출발지", "lon": str(start_x), "lat": str(start_y)},
+            "destination": {"name": "도착지", "lon": str(end_x), "lat": str(end_y)},
+            "predictionType": "departure", "predictionTime": time_str
         }
     }
     try:
         res = requests.post(url, headers=headers, json=payload)
-        if res.status_code != 200:
-            return None, f"티맵 서버 에러 (코드: {res.status_code})"
-        
+        if res.status_code != 200: return None, f"티맵 서버 에러 (코드: {res.status_code})"
         data = res.json()
-        if 'features' in data:
-            return round(data['features'][0]['properties']['totalTime'] / 60), ""
-        else:
-            return None, str(data)
-    except Exception as e: 
-        return None, str(e)
+        if 'features' in data: return round(data['features'][0]['properties']['totalTime'] / 60), ""
+        else: return None, str(data)
+    except Exception as e: return None, str(e)
 
 def format_time(mins):
     if mins is None: return "오류"
@@ -140,11 +124,13 @@ def format_time(mins):
     return f"{h}시간 {m}분" if h > 0 else f"{m}분"
 
 # ==========================================
-# 🌟 지도 꺼짐 방지용 세션 초기화
+# 🌟 세션(캐시) 및 지도 리셋 키 초기화
 # ==========================================
 if "t1_res" not in st.session_state: st.session_state.t1_res = None
 if "t2_res" not in st.session_state: st.session_state.t2_res = None
 if "t3_res" not in st.session_state: st.session_state.t3_res = None
+# 지도를 원래대로(정위치) 되돌리기 위한 고유 Key 변수
+if "map_key" not in st.session_state: st.session_state.map_key = 0 
 
 # ==========================================
 # 🖥️ 사이드바
@@ -231,6 +217,10 @@ with tab1:
         rc2.markdown(f'<a href="tmap://route?goalname={safe_end}&goalx={res["ex"]}&goaly={res["ey"]}" style="display:block; text-align:center; padding:10px; background:#EF4C35; color:#FFF; text-decoration:none; border-radius:8px; font-weight:700;">🔴 티맵 앱 열기</a>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
         
+        # 🌟 지도 정위치 리셋 버튼 추가
+        if st.button("🔄 지도 정위치로 되돌리기 (경로 한눈에 보기)", key="reset_map_1", use_container_width=True):
+            st.session_state.map_key += 1
+            
         map_c1, map_c2 = st.columns(2)
         start_icon = '<div style="background:#1E90FF; color:white; border-radius:50%; width:24px; height:24px; display:flex; justify-content:center; align-items:center; font-weight:bold; font-size:12px; border:2px solid white;">S</div>'
         end_icon = '<div style="background:#FF0000; color:white; border-radius:50%; width:24px; height:24px; display:flex; justify-content:center; align-items:center; font-weight:bold; font-size:12px; border:2px solid white;">E</div>'
@@ -244,7 +234,8 @@ with tab1:
                 folium.Marker(coords[-1], icon=folium.DivIcon(html=end_icon)).add_to(m1)
                 for s in res["k_seg"]: folium.PolyLine(locations=s['coords'], color=s['color'], weight=5, opacity=0.9).add_to(m1)
                 m1.fit_bounds(coords)
-                st_folium(m1, use_container_width=True, height=400, key="m1_t1")
+                # 고유 map_key를 붙여서 언제든 강제 초기화 가능하게 적용
+                st_folium(m1, use_container_width=True, height=400, key=f"m1_t1_{st.session_state.map_key}")
         with map_c2:
             st.caption("🗺️ 티맵 최적 경로")
             if res["t_seg"]:
@@ -254,10 +245,10 @@ with tab1:
                 folium.Marker(coords[-1], icon=folium.DivIcon(html=end_icon)).add_to(m2)
                 for s in res["t_seg"]: folium.PolyLine(locations=s['coords'], color=s['color'], weight=5, opacity=0.9).add_to(m2)
                 m2.fit_bounds(coords)
-                st_folium(m2, use_container_width=True, height=400, key="m2_t1")
+                st_folium(m2, use_container_width=True, height=400, key=f"m2_t1_{st.session_state.map_key}")
 
 # ------------------------------------------
-# 탭 2: 다중 출발지 승부 (🌟 좌우 분할 UI 적용)
+# 탭 2: 다중 출발지 승부 
 # ------------------------------------------
 with tab2:
     st.markdown("### 📍 어디서 출발하는게 가장 빠를까?")
@@ -297,7 +288,6 @@ with tab2:
         results = res_data["results"]
         ex, ey = res_data["ex"], res_data["ey"]
         
-        # 🌟 UI 개선: 1(카드) : 2.5(지도) 비율로 화면을 나눕니다!
         c_left, c_right = st.columns([1, 2.5])
         
         with c_left:
@@ -317,7 +307,13 @@ with tab2:
                 """, unsafe_allow_html=True)
                 
         with c_right:
-            st.markdown("#### 🗺️ 순위별 경로 비교 지도")
+            # 🌟 다중 경로 지도에도 정위치 리셋 버튼 추가
+            c_title, c_btn = st.columns([1, 1])
+            with c_title: st.markdown("#### 🗺️ 순위별 경로 비교 지도")
+            with c_btn:
+                if st.button("🔄 지도 정위치로 되돌리기", key="reset_map_2", use_container_width=True):
+                    st.session_state.map_key += 1
+
             m_multi = folium.Map(location=[float(ey), float(ex)], zoom_start=11, tiles=google_tiles, attr="Google")
             end_icon = '<div style="background:#000000; color:white; border-radius:50%; width:26px; height:26px; display:flex; justify-content:center; align-items:center; font-weight:bold; font-size:10px; border:2px solid white;">도착</div>'
             folium.Marker([float(ey), float(ex)], icon=folium.DivIcon(html=end_icon)).add_to(m_multi)
@@ -334,10 +330,11 @@ with tab2:
             
             if all_coords_multi:
                 m_multi.fit_bounds(all_coords_multi)
-            st_folium(m_multi, use_container_width=True, height=500, key="m_multi_t2")
+            # 고유 map_key 적용
+            st_folium(m_multi, use_container_width=True, height=500, key=f"m_multi_t2_{st.session_state.map_key}")
 
 # ------------------------------------------
-# 탭 3: 티맵 타임머신 (경로 직접 설정 추가 및 400에러 완벽 수정)
+# 탭 3: 티맵 타임머신 (🌟 혁신적인 4분할 카드 UI 적용)
 # ------------------------------------------
 with tab3:
     st.markdown("### 🔮 몇 시에 출발해야 안 막힐까?")
@@ -359,7 +356,7 @@ with tab3:
     else:
         st.info(f"📍 **예측 경로:** {start_target3 if start_target3 else '(집 미입력)'} ➔ {end_target3 if end_target3 else '(회사 미입력)'}")
 
-    if st.button("시간대별 예측 그래프 보기", type="primary", key="btn3", use_container_width=True):
+    if st.button("시간대별 예측 조회하기", type="primary", key="btn3", use_container_width=True):
         if not start_target3 or not end_target3:
             st.warning("출발지와 도착지를 모두 정확히 설정해 주세요.")
         else:
@@ -372,7 +369,6 @@ with tab3:
                     
                     for i in range(4):
                         target_time = kst_now + datetime.timedelta(hours=i)
-                        # 🌟 400 에러의 핵심: 티맵 예측 API가 요구하는 ISO-8601 타임존(+0900) 양식 완벽 부활!
                         time_str = target_time.strftime("%Y-%m-%dT%H:%M:%S+0900") 
                         label = "지금 출발" if i == 0 else f"+{i}시간 뒤 ({target_time.strftime('%H:%M')})"
                         
@@ -390,12 +386,29 @@ with tab3:
     if st.session_state.t3_res:
         res = st.session_state.t3_res
         if res["durations"]:
-            chart_data = pd.DataFrame({"출발 시간대": res["times"], "예상 소요시간(분)": res["durations"]})
-            chart_data = chart_data.set_index("출발 시간대")
-            st.bar_chart(chart_data, height=300)
-            
             min_time = min(res["durations"])
             best_idx = res["durations"].index(min_time)
-            st.success(f"💡 **가장 추천하는 시간:** {res['times'][best_idx]}에 출발하시면 약 {format_time(min_time)}이 소요되어 가장 쾌적합니다!")
+            
+            st.success(f"💡 **가장 쾌적한 추천 시간:** {res['times'][best_idx]}에 출발하시면 약 {format_time(min_time)}이 소요됩니다!")
+            
+            # 🌟 투박한 막대그래프 대신, 직관적이고 세련된 '4분할 카드 UI' 적용!
+            st.markdown("#### ⏳ 시간대별 상세 비교")
+            cols = st.columns(4)
+            for i, (label, mins) in enumerate(zip(res["times"], res["durations"])):
+                is_best = (i == best_idx)
+                # 가장 빠른 시간은 눈에 띄게 빨간색 테두리와 배경으로 강조!
+                bg_color = "#FFF4F4" if is_best else "#F8F9FA"
+                border_color = "#FF4B4B" if is_best else "#EAEAEA"
+                badge = '<div style="background:#FF4B4B; color:white; font-size:12px; font-weight:bold; border-radius:20px; padding:3px 10px; display:inline-block; margin-bottom:8px;">🏆 최적 추천</div>' if is_best else '<div style="height:26px; margin-bottom:8px;"></div>'
+
+                card_html = f"""
+                <div style="background:{bg_color}; border:2px solid {border_color}; border-radius:12px; padding:20px 10px; text-align:center; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+                    {badge}
+                    <div style="font-size:14px; color:#555; margin-bottom:10px; font-weight:600;">{label}</div>
+                    <div style="font-size:26px; font-weight:800; color:#111;">{format_time(mins)}</div>
+                </div>
+                """
+                cols[i].markdown(card_html, unsafe_allow_html=True)
+                
         else:
             st.error(f"티맵 예측 데이터를 가져올 수 없습니다. (에러: {res['err']})")
