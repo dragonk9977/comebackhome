@@ -125,7 +125,7 @@ def format_time(mins):
     return f"{h}시간 {m}분" if h > 0 else f"{m}분"
 
 # ==========================================
-# 🌟 세션 초기화 (타임머신 드롭다운 연동)
+# 🌟 세션 초기화
 # ==========================================
 kst_now = datetime.datetime.utcnow() + datetime.timedelta(hours=9)
 
@@ -334,7 +334,7 @@ with tab2:
             st_folium(m_multi, use_container_width=True, height=500, key=f"m_multi_t2_{st.session_state.map_key}")
 
 # ------------------------------------------
-# 탭 3: 티맵 타임머신 (🌟 드롭다운 방식 UI 완벽 적용)
+# 탭 3: 티맵 타임머신 (🌟 높이 정렬 및 로딩 애니메이션 추가)
 # ------------------------------------------
 with tab3:
     st.markdown("### 🔮 몇 시에 출발해야 안 막힐까?")
@@ -342,7 +342,6 @@ with tab3:
     
     route_choice3 = st.radio("🚗 타임머신 경로 선택", ["1️⃣ 출근길 (집 ➔ 회사)", "2️⃣ 퇴근길 (회사 ➔ 집)", "3️⃣ 직접 설정"], index=0 if kst_now.hour < 12 else 1, horizontal=True, key="r3")
     
-    # 🌟 라디오 버튼이 바뀌면 세션에 저장된 드롭다운 기본값(시간)도 같이 갱신해 줍니다!
     if st.session_state.prev_r3 != route_choice3:
         st.session_state.prev_r3 = route_choice3
         if route_choice3.startswith("1️⃣"): 
@@ -380,7 +379,7 @@ with tab3:
                     for i in range(4):
                         target_time = kst_now + datetime.timedelta(hours=i)
                         time_str = target_time.strftime("%Y-%m-%dT%H:%M:%S+0900") 
-                        label = "지금 출발" if i == 0 else f"+{i}시간 뒤 ({target_time.strftime('%H:%M')})"
+                        label = "지금 출발 🚀" if i == 0 else f"+{i}시간 뒤 ({target_time.strftime('%H:%M')})"
                         
                         pred_mins, err = get_tmap_prediction(sx, sy, ex, ey, time_str)
                         if pred_mins:
@@ -404,17 +403,17 @@ with tab3:
             st.success(f"💡 **가장 쾌적한 추천 시간:** {res['times'][best_idx]}에 출발하시면 약 {format_time(min_time)}이 소요됩니다!")
             st.markdown("#### ⏳ 시간대별 흐름 & 내 스케줄 비교")
             
+            # 🌟 5개 카드의 높이를 완벽하게 통일하기 위해 flex CSS 구조 적용!
             cols = st.columns(5)
             
-            # 1~4번째 칸: 자동 예측 렌더링
             for i, (label, mins) in enumerate(zip(res["times"], res["durations"])):
                 is_best = (i == best_idx)
                 bg_color = "#FFF4F4" if is_best else "#F8F9FA"
                 border_color = "#FF4B4B" if is_best else "#EAEAEA"
-                badge = '<div style="background:#FF4B4B; color:white; font-size:12px; font-weight:bold; border-radius:20px; padding:3px 10px; display:inline-block; margin-bottom:8px;">🏆 최적 추천</div>' if is_best else '<div style="height:26px; margin-bottom:8px;"></div>'
+                badge = '<div style="background:#FF4B4B; color:white; font-size:12px; font-weight:bold; border-radius:20px; padding:3px 10px; display:inline-block; margin-bottom:12px;">🏆 최적 추천</div>' if is_best else '<div style="height:26px; margin-bottom:12px;"></div>'
 
                 card_html = f"""
-                <div style="background:{bg_color}; border:2px solid {border_color}; border-radius:12px; padding:20px 5px; text-align:center; box-shadow: 0 4px 6px rgba(0,0,0,0.05); height:100%;">
+                <div style="background:{bg_color}; border:2px solid {border_color}; border-radius:12px; padding:20px 5px; text-align:center; height: 160px; display: flex; flex-direction: column; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
                     {badge}
                     <div style="font-size:13px; color:#555; margin-bottom:10px; font-weight:600;">{label}</div>
                     <div style="font-size:22px; font-weight:800; color:#111;">{format_time(mins)}</div>
@@ -422,23 +421,18 @@ with tab3:
                 """
                 cols[i].markdown(card_html, unsafe_allow_html=True)
                 
-            # 🌟 5번째 칸: 시간 변경 드롭다운(selectbox) 통합 완벽 적용!
             with cols[4]:
-                st.markdown("<div style='text-align:center; font-weight:bold; color:#1E90FF; margin-bottom:10px; font-size:15px;'>⏰ 스케줄 조절 (10분 단위)</div>", unsafe_allow_html=True)
+                st.markdown("<div style='text-align:center; font-weight:bold; color:#1E90FF; margin-bottom:6px; font-size:14px;'>⏰ 스케줄 변경 (10분 단위)</div>", unsafe_allow_html=True)
                 
-                # 10분 단위 시간 목록 생성 (00:00 ~ 23:50)
                 time_options = [f"{h:02d}:{m:02d}" for h in range(24) for m in range(0, 60, 10)]
                 default_time_str = f"{st.session_state.custom_h:02d}:{st.session_state.custom_m:02d}"
                 
-                # 만약 지정된 시간이 10분 단위로 떨어지지 않는다면 옵션에 강제 추가
                 if default_time_str not in time_options:
                     time_options.append(default_time_str)
                     time_options.sort()
                     
-                # 스트림릿 고유의 깔끔한 드롭다운 UI 
-                selected_time = st.selectbox("시간을 선택하면 갱신됩니다", time_options, index=time_options.index(default_time_str), label_visibility="collapsed")
+                selected_time = st.selectbox("시간", time_options, index=time_options.index(default_time_str), label_visibility="collapsed")
                 
-                # 선택한 시간을 세션에 업데이트
                 sel_h, sel_m = map(int, selected_time.split(":"))
                 st.session_state.custom_h = sel_h
                 st.session_state.custom_m = sel_m
@@ -447,13 +441,14 @@ with tab3:
                 if kst_now > target_dt: target_dt += datetime.timedelta(days=1)
                 custom_time_str = target_dt.strftime("%Y-%m-%dT%H:%M:%S+0900")
                 
-                # 드롭다운으로 선택된 시간만 개별적으로 티맵에 요청 (1초 컷)
-                c_mins, _ = get_tmap_prediction(res["sx"], res["sy"], res["ex"], res["ey"], custom_time_str)
+                # 🌟 시간 선택 시 돌아가는 로딩 애니메이션 추가!
+                with st.spinner("⏳ 갱신 중..."):
+                    c_mins, _ = get_tmap_prediction(res["sx"], res["sy"], res["ex"], res["ey"], custom_time_str)
                 
                 if c_mins:
                     st.markdown(f"""
-                    <div style="background:#E8F0FE; border:2px solid #1E90FF; border-radius:12px; padding:15px 5px; text-align:center; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-top:5px;">
-                        <div style="font-size:13px; color:#1E90FF; margin-bottom:5px; font-weight:600;">{target_dt.strftime('%m/%d')} 예상 소요시간</div>
+                    <div style="background:#E8F0FE; border:2px solid #1E90FF; border-radius:12px; padding:15px 5px; text-align:center; height: 95px; display: flex; flex-direction: column; justify-content: center; box-shadow: 0 4px 6px rgba(0,0,0,0.05); margin-top:2px;">
+                        <div style="font-size:12px; color:#1E90FF; margin-bottom:5px; font-weight:600;">{target_dt.strftime('%m/%d')} 예상 소요시간</div>
                         <div style="font-size:22px; font-weight:800; color:#111;">{format_time(c_mins)}</div>
                     </div>
                     """, unsafe_allow_html=True)
