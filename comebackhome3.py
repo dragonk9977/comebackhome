@@ -662,5 +662,3 @@ with tab3:
                         height=350,
                         fit_bounds=True
                     )
-
-        else:
