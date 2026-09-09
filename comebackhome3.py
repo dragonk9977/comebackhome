@@ -1,10 +1,10 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import requests
-import folium
-from streamlit_folium import st_folium
 import base64
 import os
 import urllib.parse
+import json
 import datetime
 import pandas as pd
 
@@ -51,11 +51,13 @@ st.markdown(custom_css, unsafe_allow_html=True)
 # 🔑 API 키 설정
 # ==========================================
 try:
-    KAKAO_API_KEY = st.secrets["KAKAO_API_KEY"]
+    KAKAO_API_KEY = st.secrets["KAKAO_API_KEY"]       # REST API Key
+    KAKAO_JS_KEY = st.secrets["KAKAO_JS_KEY"]         # JavaScript Key
     TMAP_APP_KEY = st.secrets["TMAP_APP_KEY"]
 except:
-    KAKAO_API_KEY = "96fc63ab0efc0a7d8591eeb8b34db8a9"
-    TMAP_APP_KEY = "kstcD6L0he3GU4SSTkWNF6IHGefkURVXak3qpabh"
+    KAKAO_API_KEY = ""
+    KAKAO_JS_KEY = ""
+    TMAP_APP_KEY = ""
 
 # ==========================================
 # 🛠️ 길찾기 핵심 함수 모음
@@ -170,7 +172,143 @@ st.markdown("---")
 # 🚀 3개의 탭 기능 분리
 # ==========================================
 tab1, tab2, tab3 = st.tabs(["🗺️ 1:1 실시간 경로", "📍 다중 출발지 승부", "🔮 시간대별 타임머신"])
-google_tiles = "https://mt1.google.com/vt/lyrs=m&hl=ko&x={x}&y={y}&z={z}"
+# Google 지도 타일 제거: 실제 Kakao Maps Web JavaScript SDK 사용
+
+# ==========================================
+# 🗺️ 실제 카카오맵 Web JavaScript SDK
+# ==========================================
+def render_kakao_map(map_id, center_lat, center_lng, route_segments=None,
+                      start=None, end=None, height=400, fit_bounds=True):
+    """
+    Folium/Google Tile 대신 실제 Kakao Maps를 표시합니다.
+    KAKAO_JS_KEY는 REST API Key가 아닌 JavaScript Key여야 합니다.
+    """
+    if not KAKAO_JS_KEY:
+        st.error("KAKAO_JS_KEY가 설정되지 않았습니다. Streamlit Secrets에 JavaScript Key를 추가해 주세요.")
+        return
+
+    route_segments = route_segments or []
+
+    route_data = []
+    for seg in route_segments:
+        if not seg.get("coords"):
+            continue
+        route_data.append({
+            "color": seg.get("color", "#1E90FF"),
+            "coords": [{"lat": float(c[0]), "lng": float(c[1])}
+                       for c in seg["coords"]]
+        })
+
+    data = {
+        "center": {"lat": float(center_lat), "lng": float(center_lng)},
+        "route": route_data,
+        "start": {"lat": float(start[0]), "lng": float(start[1])} if start else None,
+        "end": {"lat": float(end[0]), "lng": float(end[1])} if end else None
+    }
+
+    data_json = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
+    js_key = urllib.parse.quote(KAKAO_JS_KEY, safe="")
+
+    html = f"""
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+html,body {{ margin:0; padding:0; width:100%; height:100%; overflow:hidden; }}
+#map {{ width:100%; height:100%; min-height:{height}px; }}
+.map-error {{ display:flex; align-items:center; justify-content:center;
+              height:100%; background:#f8f9fa; color:#555;
+              text-align:center; font-family:Arial,sans-serif; }}
+</style>
+<script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey={js_key}&autoload=false"></script>
+</head>
+<body>
+<div id="map"></div>
+<script>
+const DATA = {data_json};
+
+function markerImage(color, text) {{
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="42" height="42">
+      <circle cx="21" cy="21" r="18" fill="${{color}}" stroke="white" stroke-width="3"/>
+      <text x="21" y="27" text-anchor="middle" font-size="15"
+            font-weight="bold" fill="white">${{text}}</text>
+    </svg>`;
+    return new kakao.maps.MarkerImage(
+        "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg),
+        new kakao.maps.Size(42,42),
+        {{offset:new kakao.maps.Point(21,21)}}
+    );
+}}
+
+function initMap() {{
+    const map = new kakao.maps.Map(document.getElementById("map"), {{
+        center: new kakao.maps.LatLng(DATA.center.lat, DATA.center.lng),
+        level: 7
+    }});
+
+    const bounds = new kakao.maps.LatLngBounds();
+
+    DATA.route.forEach(function(seg) {{
+        const path = seg.coords.map(function(c) {{
+            const p = new kakao.maps.LatLng(c.lat, c.lng);
+            bounds.extend(p);
+            return p;
+        }});
+
+        if (path.length > 1) {{
+            new kakao.maps.Polyline({{
+                map: map,
+                path: path,
+                strokeWeight: 6,
+                strokeColor: seg.color,
+                strokeOpacity: 0.9,
+                strokeStyle: "solid"
+            }});
+        }}
+    }});
+
+    if (DATA.start) {{
+        const p = new kakao.maps.LatLng(DATA.start.lat, DATA.start.lng);
+        new kakao.maps.Marker({{
+            map: map, position: p, image: markerImage("#1E90FF", "S")
+        }});
+        bounds.extend(p);
+    }}
+
+    if (DATA.end) {{
+        const p = new kakao.maps.LatLng(DATA.end.lat, DATA.end.lng);
+        new kakao.maps.Marker({{
+            map: map, position: p, image: markerImage("#FF0000", "E")
+        }});
+        bounds.extend(p);
+    }}
+
+    if ({str(fit_bounds).lower()} && !bounds.isEmpty()) {{
+        map.setBounds(bounds, 40, 40, 40, 40);
+    }}
+
+    window.addEventListener("resize", function() {{
+        map.relayout();
+        if ({str(fit_bounds).lower()} && !bounds.isEmpty()) {{
+            map.setBounds(bounds, 40, 40, 40, 40);
+        }}
+    }});
+}}
+
+if (typeof kakao === "undefined" || !kakao.maps) {{
+    document.getElementById("map").innerHTML =
+        '<div class="map-error">카카오맵 SDK를 불러오지 못했습니다.<br>JavaScript Key와 도메인 설정을 확인해 주세요.</div>';
+}} else {{
+    kakao.maps.load(initMap);
+}}
+</script>
+</body>
+</html>
+"""
+    components.html(html, height=height, scrolling=False)
+
+
 # 🌟 공통 아이콘 설정
 start_icon = '<div style="background:#1E90FF; color:white; border-radius:50%; width:24px; height:24px; display:flex; justify-content:center; align-items:center; font-weight:bold; font-size:12px; border:2px solid white;">S</div>'
 end_icon = '<div style="background:#FF0000; color:white; border-radius:50%; width:24px; height:24px; display:flex; justify-content:center; align-items:center; font-weight:bold; font-size:12px; border:2px solid white;">E</div>'
@@ -228,27 +366,35 @@ with tab1:
             st.session_state.map_key += 1
             
         map_c1, map_c2 = st.columns(2)
-        
+
         with map_c1:
             st.caption("🗺️ 카카오내비 최적 경로")
             if res["k_seg"]:
-                coords = [c for s in res["k_seg"] for c in s['coords']]
-                m1 = folium.Map(location=coords[len(coords)//2], zoom_start=11, tiles=google_tiles, attr="Google")
-                folium.Marker(coords[0], icon=folium.DivIcon(html=start_icon)).add_to(m1)
-                folium.Marker(coords[-1], icon=folium.DivIcon(html=end_icon)).add_to(m1)
-                for s in res["k_seg"]: folium.PolyLine(locations=s['coords'], color=s['color'], weight=5, opacity=0.9).add_to(m1)
-                m1.fit_bounds(coords, padding=(10, 10)) # 🌟 초밀착 줌업!
-                st_folium(m1, use_container_width=True, height=400, key=f"m1_t1_{st.session_state.map_key}")
+                render_kakao_map(
+                    map_id=f"kakao_t1_{st.session_state.map_key}",
+                    center_lat=res["ey"],
+                    center_lng=res["ex"],
+                    route_segments=res["k_seg"],
+                    start=[res["sy"], res["sx"]],
+                    end=[res["ey"], res["ex"]],
+                    height=400,
+                    fit_bounds=True
+                )
+
         with map_c2:
-            st.caption("🗺️ 티맵 최적 경로")
+            st.caption("🗺️ TMAP 최적 경로")
             if res["t_seg"]:
-                coords = [c for s in res["t_seg"] for c in s['coords']]
-                m2 = folium.Map(location=coords[len(coords)//2], zoom_start=11, tiles=google_tiles, attr="Google")
-                folium.Marker(coords[0], icon=folium.DivIcon(html=start_icon)).add_to(m2)
-                folium.Marker(coords[-1], icon=folium.DivIcon(html=end_icon)).add_to(m2)
-                for s in res["t_seg"]: folium.PolyLine(locations=s['coords'], color=s['color'], weight=5, opacity=0.9).add_to(m2)
-                m2.fit_bounds(coords, padding=(10, 10)) # 🌟 초밀착 줌업!
-                st_folium(m2, use_container_width=True, height=400, key=f"m2_t1_{st.session_state.map_key}")
+                render_kakao_map(
+                    map_id=f"kakao_t1_tmap_{st.session_state.map_key}",
+                    center_lat=res["ey"],
+                    center_lng=res["ex"],
+                    route_segments=res["t_seg"],
+                    start=[res["sy"], res["sx"]],
+                    end=[res["ey"], res["ex"]],
+                    height=400,
+                    fit_bounds=True
+                )
+
 
 # ------------------------------------------
 # 탭 2: 다중 출발지 승부 (🌟 개별 지도 3개 추가!)
@@ -320,21 +466,23 @@ with tab2:
                 if st.button("🔄 전체 지도 정위치", key="reset_map_2", use_container_width=True):
                     st.session_state.map_key += 1
 
-            m_multi = folium.Map(location=[float(ey), float(ex)], zoom_start=11, tiles=google_tiles, attr="Google")
-            folium.Marker([float(ey), float(ex)], icon=folium.DivIcon(html=end_icon)).add_to(m_multi)
-            
-            all_coords_multi = []
+            all_segments_multi = []
             for res in results:
-                if res["k_seg"]:
-                    s_icon = f'<div style="background:{res["color"]}; color:white; border-radius:20px; padding:3px 8px; display:flex; justify-content:center; align-items:center; font-weight:bold; font-size:12px; border:2px solid white; white-space:nowrap;">{res["rank"]}등 출발</div>'
-                    folium.Marker([float(res["sy"]), float(res["sx"])], icon=folium.DivIcon(html=s_icon)).add_to(m_multi)
-                    # 통합 지도에서는 각 순위별 단색(빨,파,초)으로 선을 그어 줍니다
-                    for s in res["k_seg"]: 
-                        folium.PolyLine(locations=s['coords'], color=res['color'], weight=5, opacity=0.8).add_to(m_multi)
-                        all_coords_multi.extend(s['coords'])
-            
-            if all_coords_multi: m_multi.fit_bounds(all_coords_multi, padding=(10, 10)) # 초밀착 줌
-            st_folium(m_multi, use_container_width=True, height=450, key=f"m_multi_t2_{st.session_state.map_key}")
+                for s in res["k_seg"]:
+                    all_segments_multi.append({
+                        "coords": s["coords"],
+                        "color": res["color"]
+                    })
+
+            render_kakao_map(
+                map_id=f"kakao_multi_{st.session_state.map_key}",
+                center_lat=float(ey),
+                center_lng=float(ex),
+                route_segments=all_segments_multi,
+                end=[float(ey), float(ex)],
+                height=450,
+                fit_bounds=True
+            )
 
         # 🌟 그 아래에 개별 출발지별 상세 지도 나란히 배치!
         st.markdown("<hr style='margin: 20px 0 10px 0;'>", unsafe_allow_html=True)
@@ -344,19 +492,17 @@ with tab2:
         for i, res in enumerate(results):
             with indiv_cols[i]:
                 st.markdown(f"**[{res['rank']}등]** {res['name']} 출발")
-                m_indiv = folium.Map(location=[float(ey), float(ex)], zoom_start=11, tiles=google_tiles, attr="Google")
-                folium.Marker([float(ey), float(ex)], icon=folium.DivIcon(html=end_icon)).add_to(m_indiv)
-                folium.Marker([float(res["sy"]), float(res["sx"])], icon=folium.DivIcon(html=start_icon)).add_to(m_indiv)
-                
-                coords_indiv = []
-                if res["k_seg"]:
-                    for s in res["k_seg"]:
-                        # 개별 지도에서는 고유 색상이 아닌 '빨/노/초' 실시간 교통량 색상으로 그려줍니다!
-                        folium.PolyLine(locations=s['coords'], color=s['color'], weight=5, opacity=0.9).add_to(m_indiv)
-                        coords_indiv.extend(s['coords'])
-                        
-                if coords_indiv: m_indiv.fit_bounds(coords_indiv, padding=(10, 10))
-                st_folium(m_indiv, use_container_width=True, height=300, key=f"m_indiv_t2_{res['rank']}_{st.session_state.map_key}")
+                render_kakao_map(
+                    map_id=f"kakao_indiv_{res['rank']}_{st.session_state.map_key}",
+                    center_lat=float(ey),
+                    center_lng=float(ex),
+                    route_segments=res["k_seg"],
+                    start=[float(res["sy"]), float(res["sx"])],
+                    end=[float(ey), float(ex)],
+                    height=300,
+                    fit_bounds=True
+                )
+
 
 # ------------------------------------------
 # 탭 3: 티맵 타임머신 (🌟 지도 표출 완벽 반영)
@@ -488,25 +634,33 @@ with tab3:
                     st.session_state.map_key += 1
                     
             map_c1, map_c2 = st.columns(2)
+
             with map_c1:
                 st.caption("🗺️ 카카오내비 기준 경로")
                 if res.get("k_seg"):
-                    coords = [c for s in res["k_seg"] for c in s['coords']]
-                    m1 = folium.Map(location=coords[len(coords)//2], zoom_start=11, tiles=google_tiles, attr="Google")
-                    folium.Marker(coords[0], icon=folium.DivIcon(html=start_icon)).add_to(m1)
-                    folium.Marker(coords[-1], icon=folium.DivIcon(html=end_icon)).add_to(m1)
-                    for s in res["k_seg"]: folium.PolyLine(locations=s['coords'], color=s['color'], weight=5, opacity=0.9).add_to(m1)
-                    m1.fit_bounds(coords, padding=(10, 10)) # 🌟 초밀착 줌업!
-                    st_folium(m1, use_container_width=True, height=350, key=f"m1_t3_{st.session_state.map_key}")
+                    render_kakao_map(
+                        map_id=f"kakao_t3_{st.session_state.map_key}",
+                        center_lat=res["ey"],
+                        center_lng=res["ex"],
+                        route_segments=res["k_seg"],
+                        start=[res["sy"], res["sx"]],
+                        end=[res["ey"], res["ex"]],
+                        height=350,
+                        fit_bounds=True
+                    )
+
             with map_c2:
-                st.caption("🗺️ 티맵 기준 경로")
+                st.caption("🗺️ TMAP 기준 경로 (카카오맵 배경 + TMAP 경로)")
                 if res.get("t_seg"):
-                    coords = [c for s in res["t_seg"] for c in s['coords']]
-                    m2 = folium.Map(location=coords[len(coords)//2], zoom_start=11, tiles=google_tiles, attr="Google")
-                    folium.Marker(coords[0], icon=folium.DivIcon(html=start_icon)).add_to(m2)
-                    folium.Marker(coords[-1], icon=folium.DivIcon(html=end_icon)).add_to(m2)
-                    for s in res["t_seg"]: folium.PolyLine(locations=s['coords'], color=s['color'], weight=5, opacity=0.9).add_to(m2)
-                    m2.fit_bounds(coords, padding=(10, 10)) # 🌟 초밀착 줌업!
-                    st_folium(m2, use_container_width=True, height=350, key=f"m2_t3_{st.session_state.map_key}")
+                    render_kakao_map(
+                        map_id=f"kakao_t3_tmap_{st.session_state.map_key}",
+                        center_lat=res["ey"],
+                        center_lng=res["ex"],
+                        route_segments=res["t_seg"],
+                        start=[res["sy"], res["sx"]],
+                        end=[res["ey"], res["ex"]],
+                        height=350,
+                        fit_bounds=True
+                    )
+
         else:
-            st.error(f"티맵 예측 데이터를 가져올 수 없습니다. (에러: {res['err']})")
