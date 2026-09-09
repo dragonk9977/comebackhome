@@ -6,6 +6,7 @@ import base64
 import os
 import urllib.parse
 import datetime
+import pandas as pd
 
 # ==========================================
 # 🖥️ 웹 페이지 기본 설정
@@ -124,12 +125,12 @@ def format_time(mins):
     return f"{h}시간 {m}분" if h > 0 else f"{m}분"
 
 # ==========================================
-# 🌟 세션(캐시) 및 지도 리셋 키 초기화
+# 🌟 세션(캐시) 관리
 # ==========================================
 if "t1_res" not in st.session_state: st.session_state.t1_res = None
 if "t2_res" not in st.session_state: st.session_state.t2_res = None
 if "t3_res" not in st.session_state: st.session_state.t3_res = None
-# 지도를 원래대로(정위치) 되돌리기 위한 고유 Key 변수
+if "t3_special_res" not in st.session_state: st.session_state.t3_special_res = None # 🌟 고정 스케줄 캐시 추가
 if "map_key" not in st.session_state: st.session_state.map_key = 0 
 
 # ==========================================
@@ -217,7 +218,6 @@ with tab1:
         rc2.markdown(f'<a href="tmap://route?goalname={safe_end}&goalx={res["ex"]}&goaly={res["ey"]}" style="display:block; text-align:center; padding:10px; background:#EF4C35; color:#FFF; text-decoration:none; border-radius:8px; font-weight:700;">🔴 티맵 앱 열기</a>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
         
-        # 🌟 지도 정위치 리셋 버튼 추가
         if st.button("🔄 지도 정위치로 되돌리기 (경로 한눈에 보기)", key="reset_map_1", use_container_width=True):
             st.session_state.map_key += 1
             
@@ -234,7 +234,6 @@ with tab1:
                 folium.Marker(coords[-1], icon=folium.DivIcon(html=end_icon)).add_to(m1)
                 for s in res["k_seg"]: folium.PolyLine(locations=s['coords'], color=s['color'], weight=5, opacity=0.9).add_to(m1)
                 m1.fit_bounds(coords)
-                # 고유 map_key를 붙여서 언제든 강제 초기화 가능하게 적용
                 st_folium(m1, use_container_width=True, height=400, key=f"m1_t1_{st.session_state.map_key}")
         with map_c2:
             st.caption("🗺️ 티맵 최적 경로")
@@ -307,7 +306,6 @@ with tab2:
                 """, unsafe_allow_html=True)
                 
         with c_right:
-            # 🌟 다중 경로 지도에도 정위치 리셋 버튼 추가
             c_title, c_btn = st.columns([1, 1])
             with c_title: st.markdown("#### 🗺️ 순위별 경로 비교 지도")
             with c_btn:
@@ -330,15 +328,14 @@ with tab2:
             
             if all_coords_multi:
                 m_multi.fit_bounds(all_coords_multi)
-            # 고유 map_key 적용
             st_folium(m_multi, use_container_width=True, height=500, key=f"m_multi_t2_{st.session_state.map_key}")
 
 # ------------------------------------------
-# 탭 3: 티맵 타임머신 (🌟 혁신적인 4분할 카드 UI 적용)
+# 탭 3: 티맵 타임머신
 # ------------------------------------------
 with tab3:
     st.markdown("### 🔮 몇 시에 출발해야 안 막힐까?")
-    st.info("티맵 빅데이터를 분석하여 **현재 시간부터 +3시간 뒤**까지의 교통량을 예측합니다.")
+    st.info("티맵 빅데이터를 분석하여 예측 소요 시간을 제공합니다.")
     
     route_choice3 = st.radio("🚗 타임머신 경로 선택", ["1️⃣ 출근길 (집 ➔ 회사)", "2️⃣ 퇴근길 (회사 ➔ 집)", "3️⃣ 직접 설정"], index=0 if kst_now.hour < 12 else 1, horizontal=True, key="r3")
     
@@ -356,7 +353,8 @@ with tab3:
     else:
         st.info(f"📍 **예측 경로:** {start_target3 if start_target3 else '(집 미입력)'} ➔ {end_target3 if end_target3 else '(회사 미입력)'}")
 
-    if st.button("시간대별 예측 조회하기", type="primary", key="btn3", use_container_width=True):
+    if st.button("시간대별 예측 조회하기 (현재~3시간 뒤)", type="primary", key="btn3", use_container_width=True):
+        st.session_state.t3_special_res = None # 일반 조회 시 고정 스케줄 캐시 초기화
         if not start_target3 or not end_target3:
             st.warning("출발지와 도착지를 모두 정확히 설정해 주세요.")
         else:
@@ -391,12 +389,10 @@ with tab3:
             
             st.success(f"💡 **가장 쾌적한 추천 시간:** {res['times'][best_idx]}에 출발하시면 약 {format_time(min_time)}이 소요됩니다!")
             
-            # 🌟 투박한 막대그래프 대신, 직관적이고 세련된 '4분할 카드 UI' 적용!
             st.markdown("#### ⏳ 시간대별 상세 비교")
             cols = st.columns(4)
             for i, (label, mins) in enumerate(zip(res["times"], res["durations"])):
                 is_best = (i == best_idx)
-                # 가장 빠른 시간은 눈에 띄게 빨간색 테두리와 배경으로 강조!
                 bg_color = "#FFF4F4" if is_best else "#F8F9FA"
                 border_color = "#FF4B4B" if is_best else "#EAEAEA"
                 badge = '<div style="background:#FF4B4B; color:white; font-size:12px; font-weight:bold; border-radius:20px; padding:3px 10px; display:inline-block; margin-bottom:8px;">🏆 최적 추천</div>' if is_best else '<div style="height:26px; margin-bottom:8px;"></div>'
@@ -412,3 +408,50 @@ with tab3:
                 
         else:
             st.error(f"티맵 예측 데이터를 가져올 수 없습니다. (에러: {res['err']})")
+
+        # 🌟 맨 아래 정규 출/퇴근 고정 시간 예측 버튼 추가
+        st.markdown("<br>", unsafe_allow_html=True)
+        
+        btn_label = None
+        if route_choice3 == "1️⃣ 출근길 (집 ➔ 회사)":
+            btn_label = "💼 나의 정규 출근 시간 (05:00) 소요시간 확인하기"
+            target_h, target_m = 5, 0
+        elif route_choice3 == "2️⃣ 퇴근길 (회사 ➔ 집)":
+            btn_label = "🏠 나의 정규 퇴근 시간 (17:30) 소요시간 확인하기"
+            target_h, target_m = 17, 30
+            
+        if btn_label:
+            if st.button(btn_label, use_container_width=True):
+                # 선택된 시간이 오늘 이미 지났는지 체크하고, 지났으면 내일로 계산
+                target_dt = kst_now.replace(hour=target_h, minute=target_m, second=0, microsecond=0)
+                if kst_now > target_dt:
+                    target_dt += datetime.timedelta(days=1)
+                
+                time_str = target_dt.strftime("%Y-%m-%dT%H:%M:%S+0900")
+                display_label = target_dt.strftime("%m월 %d일 %H:%M")
+                
+                with st.spinner(f"{display_label} 기준 예측 데이터를 수집 중입니다..."):
+                    sx, sy = get_kakao_coords(start_target3)
+                    ex, ey = get_kakao_coords(end_target3)
+                    if sx and ex:
+                        pred_mins, err = get_tmap_prediction(sx, sy, ex, ey, time_str)
+                        if pred_mins:
+                            st.session_state.t3_special_res = {"label": display_label, "mins": pred_mins}
+                        else:
+                            st.session_state.t3_special_res = {"err": err}
+                    else:
+                        st.session_state.t3_special_res = {"err": "주소를 찾을 수 없습니다."}
+
+        # 고정 스케줄 예측 결과 화면
+        if st.session_state.t3_special_res:
+            spec = st.session_state.t3_special_res
+            if "err" in spec:
+                st.error(f"예측 데이터를 가져올 수 없습니다. (에러: {spec['err']})")
+            else:
+                st.markdown(f"""
+                <div style="background:#E8F0FE; border:2px solid #1E90FF; border-radius:12px; padding:25px; text-align:center; margin-top:15px; box-shadow: 0 4px 6px rgba(0,0,0,0.05);">
+                    <div style="color:#1E90FF; font-weight:bold; font-size:15px; margin-bottom:8px;">⏰ 고정 스케줄 예측 결과</div>
+                    <div style="font-size:18px; color:#333; margin-bottom:12px;"><b>{spec['label']}</b> 출발 기준 예측 소요시간은</div>
+                    <div style="font-size:36px; font-weight:900; color:#111;">{format_time(spec['mins'])} <span style="font-size:18px; font-weight:600; color:#555;">입니다.</span></div>
+                </div>
+                """, unsafe_allow_html=True)
