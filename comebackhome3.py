@@ -509,6 +509,8 @@ setDebug(
 </html>
 """
 
+st.error("🔥 render_kakao_map() 함수까지 실행됨")
+
     components.html(
         html,
         height=height,
