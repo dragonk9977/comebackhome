@@ -177,136 +177,403 @@ tab1, tab2, tab3 = st.tabs(["🗺️ 1:1 실시간 경로", "📍 다중 출발�
 # ==========================================
 # 🗺️ 실제 카카오맵 Web JavaScript SDK
 # ==========================================
-def render_kakao_map(map_id, center_lat, center_lng, route_segments=None,
-                      start=None, end=None, height=400, fit_bounds=True):
+def render_kakao_map(
+    map_id,
+    center_lat,
+    center_lng,
+    route_segments=None,
+    start=None,
+    end=None,
+    height=400,
+    fit_bounds=True
+):
     """
-    Folium/Google Tile 대신 실제 Kakao Maps를 표시합니다.
-    KAKAO_JS_KEY는 REST API Key가 아닌 JavaScript Key여야 합니다.
+    실제 Kakao Maps Web JavaScript SDK 지도 표시
     """
+
     if not KAKAO_JS_KEY:
-        st.error("KAKAO_JS_KEY가 설정되지 않았습니다. Streamlit Secrets에 JavaScript Key를 추가해 주세요.")
+        st.error(
+            "KAKAO_JS_KEY가 없습니다. "
+            "Streamlit Secrets에 JavaScript Key를 등록해주세요."
+        )
         return
 
     route_segments = route_segments or []
 
     route_data = []
+
     for seg in route_segments:
-        if not seg.get("coords"):
+        coords = seg.get("coords", [])
+
+        if not coords:
             continue
-        route_data.append({
-            "color": seg.get("color", "#1E90FF"),
-            "coords": [{"lat": float(c[0]), "lng": float(c[1])}
-                       for c in seg["coords"]]
-        })
+
+        clean_coords = []
+
+        for c in coords:
+            try:
+                clean_coords.append({
+                    "lat": float(c[0]),
+                    "lng": float(c[1])
+                })
+            except Exception:
+                continue
+
+        if len(clean_coords) >= 2:
+            route_data.append({
+                "color": seg.get("color", "#1E90FF"),
+                "coords": clean_coords
+            })
 
     data = {
-        "center": {"lat": float(center_lat), "lng": float(center_lng)},
+        "center": {
+            "lat": float(center_lat),
+            "lng": float(center_lng)
+        },
         "route": route_data,
-        "start": {"lat": float(start[0]), "lng": float(start[1])} if start else None,
-        "end": {"lat": float(end[0]), "lng": float(end[1])} if end else None
+        "start": (
+            {
+                "lat": float(start[0]),
+                "lng": float(start[1])
+            }
+            if start else None
+        ),
+        "end": (
+            {
+                "lat": float(end[0]),
+                "lng": float(end[1])
+            }
+            if end else None
+        )
     }
 
-    data_json = json.dumps(data, ensure_ascii=False, separators=(",", ":"))
-    js_key = urllib.parse.quote(KAKAO_JS_KEY, safe="")
+    data_json = json.dumps(
+        data,
+        ensure_ascii=False,
+        separators=(",", ":")
+    )
+
+    # JavaScript Key는 URL에 그대로 넣어줍니다.
+    js_key = KAKAO_JS_KEY.strip()
 
     html = f"""
 <!DOCTYPE html>
 <html>
 <head>
 <meta charset="utf-8">
+
 <style>
-html,body {{ margin:0; padding:0; width:100%; height:100%; overflow:hidden; }}
-#map {{ width:100%; height:100%; min-height:{height}px; }}
-.map-error {{ display:flex; align-items:center; justify-content:center;
-              height:100%; background:#f8f9fa; color:#555;
-              text-align:center; font-family:Arial,sans-serif; }}
+html, body {{
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+}}
+
+#map {{
+    width: 100%;
+    height: 100%;
+    min-height: {height}px;
+}}
+
+.map-error {{
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    background: #f8f9fa;
+    color: #555;
+    text-align: center;
+    font-family: Arial, sans-serif;
+    padding: 20px;
+    box-sizing: border-box;
+}}
 </style>
-<script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey={js_key}&autoload=false"></script>
+
+<script
+    type="text/javascript"
+    src="https://dapi.kakao.com/v2/maps/sdk.js?appkey={js_key}&autoload=false">
+</script>
+
 </head>
+
 <body>
+
 <div id="map"></div>
+
 <script>
+
 const DATA = {data_json};
 
+function showError(message) {{
+    document.getElementById("map").innerHTML =
+        '<div class="map-error">' +
+        message +
+        '</div>';
+}}
+
 function markerImage(color, text) {{
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="42" height="42">
-      <circle cx="21" cy="21" r="18" fill="${{color}}" stroke="white" stroke-width="3"/>
-      <text x="21" y="27" text-anchor="middle" font-size="15"
-            font-weight="bold" fill="white">${{text}}</text>
-    </svg>`;
+
+    const svg = `
+        <svg xmlns="http://www.w3.org/2000/svg"
+             width="42"
+             height="42">
+
+            <circle
+                cx="21"
+                cy="21"
+                r="18"
+                fill="${{color}}"
+                stroke="white"
+                stroke-width="3"/>
+
+            <text
+                x="21"
+                y="27"
+                text-anchor="middle"
+                font-size="15"
+                font-weight="bold"
+                fill="white">
+                ${{text}}
+            </text>
+
+        </svg>
+    `;
+
     return new kakao.maps.MarkerImage(
-        "data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg),
-        new kakao.maps.Size(42,42),
-        {{offset:new kakao.maps.Point(21,21)}}
+        "data:image/svg+xml;charset=UTF-8," +
+        encodeURIComponent(svg),
+        new kakao.maps.Size(42, 42),
+        {{
+            offset: new kakao.maps.Point(21, 21)
+        }}
     );
 }}
 
 function initMap() {{
-    const map = new kakao.maps.Map(document.getElementById("map"), {{
-        center: new kakao.maps.LatLng(DATA.center.lat, DATA.center.lng),
-        level: 7
-    }});
 
-    const bounds = new kakao.maps.LatLngBounds();
+    try {{
 
-    DATA.route.forEach(function(seg) {{
-        const path = seg.coords.map(function(c) {{
-            const p = new kakao.maps.LatLng(c.lat, c.lng);
-            bounds.extend(p);
-            return p;
-        }});
+        const mapElement =
+            document.getElementById("map");
 
-        if (path.length > 1) {{
-            new kakao.maps.Polyline({{
-                map: map,
-                path: path,
-                strokeWeight: 6,
-                strokeColor: seg.color,
-                strokeOpacity: 0.9,
-                strokeStyle: "solid"
+        if (!mapElement) {{
+            return;
+        }}
+
+        const map = new kakao.maps.Map(
+            mapElement,
+            {{
+                center: new kakao.maps.LatLng(
+                    DATA.center.lat,
+                    DATA.center.lng
+                ),
+                level: 7
+            }}
+        );
+
+        const bounds =
+            new kakao.maps.LatLngBounds();
+
+        // ==========================
+        // 경로 그리기
+        // ==========================
+
+        DATA.route.forEach(function(seg) {{
+
+            const path = [];
+
+            seg.coords.forEach(function(c) {{
+
+                const position =
+                    new kakao.maps.LatLng(
+                        c.lat,
+                        c.lng
+                    );
+
+                path.push(position);
+                bounds.extend(position);
             }});
-        }}
-    }});
 
-    if (DATA.start) {{
-        const p = new kakao.maps.LatLng(DATA.start.lat, DATA.start.lng);
-        new kakao.maps.Marker({{
-            map: map, position: p, image: markerImage("#1E90FF", "S")
+            if (path.length >= 2) {{
+
+                new kakao.maps.Polyline({{
+
+                    map: map,
+
+                    path: path,
+
+                    strokeWeight: 6,
+
+                    strokeColor:
+                        seg.color || "#1E90FF",
+
+                    strokeOpacity: 0.9,
+
+                    strokeStyle: "solid"
+
+                }});
+            }}
+
         }});
-        bounds.extend(p);
-    }}
 
-    if (DATA.end) {{
-        const p = new kakao.maps.LatLng(DATA.end.lat, DATA.end.lng);
-        new kakao.maps.Marker({{
-            map: map, position: p, image: markerImage("#FF0000", "E")
-        }});
-        bounds.extend(p);
-    }}
+        // ==========================
+        // 출발지
+        // ==========================
 
-    if ({str(fit_bounds).lower()} && !bounds.isEmpty()) {{
-        map.setBounds(bounds, 40, 40, 40, 40);
-    }}
+        if (DATA.start) {{
 
-    window.addEventListener("resize", function() {{
-        map.relayout();
-        if ({str(fit_bounds).lower()} && !bounds.isEmpty()) {{
-            map.setBounds(bounds, 40, 40, 40, 40);
+            const startPosition =
+                new kakao.maps.LatLng(
+                    DATA.start.lat,
+                    DATA.start.lng
+                );
+
+            new kakao.maps.Marker({{
+
+                map: map,
+
+                position: startPosition,
+
+                image:
+                    markerImage(
+                        "#1E90FF",
+                        "S"
+                    )
+
+            }});
+
+            bounds.extend(startPosition);
         }}
-    }});
+
+        // ==========================
+        // 도착지
+        // ==========================
+
+        if (DATA.end) {{
+
+            const endPosition =
+                new kakao.maps.LatLng(
+                    DATA.end.lat,
+                    DATA.end.lng
+                );
+
+            new kakao.maps.Marker({{
+
+                map: map,
+
+                position: endPosition,
+
+                image:
+                    markerImage(
+                        "#FF0000",
+                        "E"
+                    )
+
+            }});
+
+            bounds.extend(endPosition);
+        }}
+
+        // ==========================
+        // 경로 전체 보기
+        // ==========================
+
+        if (
+            {str(fit_bounds).lower()}
+            &&
+            !bounds.isEmpty()
+        ) {{
+
+            map.setBounds(
+                bounds,
+                40,
+                40,
+                40,
+                40
+            );
+        }}
+
+        // ==========================
+        // 화면 크기 변경
+        // ==========================
+
+        window.addEventListener(
+            "resize",
+            function() {{
+
+                map.relayout();
+
+                if (
+                    {str(fit_bounds).lower()}
+                    &&
+                    !bounds.isEmpty()
+                ) {{
+
+                    map.setBounds(
+                        bounds,
+                        40,
+                        40,
+                        40,
+                        40
+                    );
+                }}
+
+            }}
+        );
+
+    }}
+    catch (e) {{
+
+        showError(
+            "카카오맵 초기화 오류<br><br>" +
+            e.message
+        );
+
+        console.error(e);
+
+    }}
+
 }}
 
-if (typeof kakao === "undefined" || !kakao.maps) {{
-    document.getElementById("map").innerHTML =
-        '<div class="map-error">카카오맵 SDK를 불러오지 못했습니다.<br>JavaScript Key와 도메인 설정을 확인해 주세요.</div>';
-}} else {{
-    kakao.maps.load(initMap);
+
+// ==============================
+// Kakao Maps SDK 확인
+// ==============================
+
+if (
+    typeof kakao === "undefined" ||
+    !kakao.maps
+) {{
+
+    showError(
+        "카카오맵 SDK를 불러오지 못했습니다.<br><br>" +
+        "1. JavaScript Key 확인<br>" +
+        "2. JavaScript SDK 도메인 확인<br>" +
+        "3. 카카오맵 API 사용 설정 확인"
+    );
+
 }}
+else {{
+
+    kakao.maps.load(function() {{
+        initMap();
+    }});
+
+}}
+
 </script>
+
 </body>
 </html>
 """
-    components.html(html, height=height, scrolling=False)
+
+    components.html(
+        html,
+        height=height,
+        scrolling=False
+    )
 
 
 # 🌟 공통 아이콘 설정
