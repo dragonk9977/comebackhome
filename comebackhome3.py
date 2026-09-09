@@ -79,11 +79,9 @@ def get_kakao_route(start_x, start_y, end_x, end_y, solid_color=None):
         segments = []
         for section in route.get('sections', []):
             for road in section.get('roads', []):
-                if solid_color:
-                    color = solid_color
-                else:
-                    color = {1:"#FF0000", 2:"#FF8C00", 3:"#FFD700", 4:"#008000"}.get(road.get('traffic_state', 0), "#1E90FF")
-                coords = [[v, road['vertexes'][i]] for i, v in enumerate(road['vertexes'][1::2])]
+                color = solid_color if solid_color else {1:"#FF0000", 2:"#FF8C00", 3:"#FFD700", 4:"#008000"}.get(road.get('traffic_state', 0), "#1E90FF")
+                # 🌟 버그 수정 1: Folium 지도용 좌표계 [위도(y), 경도(x)] 순서로 완벽하게 뒤집기
+                coords = [[road['vertexes'][i+1], road['vertexes'][i]] for i in range(0, len(road['vertexes']), 2)]
                 if coords: segments.append({"coords": coords, "color": color})
         return distance_km, duration_min, segments
     return None, None, []
@@ -98,6 +96,7 @@ def get_tmap_route(start_x, start_y, end_x, end_y):
         if 'features' in res:
             dist = round(res['features'][0]['properties']['totalDistance'] / 1000, 1)
             time = round(res['features'][0]['properties']['totalTime'] / 60) 
+            # 🌟 티맵 좌표계도 [위도(y), 경도(x)] 순서로 유지 (기존 정상작동 부분 확인)
             segments = [{"coords": [[c[1], c[0]] for c in f['geometry']['coordinates']], "color": "#1E90FF"} 
                         for f in res['features'] if f.get('geometry', {}).get('type') == 'LineString']
             return dist, time, segments
@@ -107,7 +106,6 @@ def get_tmap_route(start_x, start_y, end_x, end_y):
 def get_tmap_prediction(start_x, start_y, end_x, end_y, time_str):
     url = "https://apis.openapi.sk.com/tmap/routes/prediction?version=1&format=json"
     headers = {"appKey": TMAP_APP_KEY, "Content-Type": "application/json"}
-    # 🌟 버그 수정: predictionType 누락 해결 및 정확한 포맷 전달
     payload = {
         "reqCoordType": "WGS84GEO", "resCoordType": "WGS84GEO",
         "startX": str(start_x), "startY": str(start_y), "endX": str(end_x), "endY": str(end_y),
@@ -116,11 +114,16 @@ def get_tmap_prediction(start_x, start_y, end_x, end_y, time_str):
         "predictionTime": time_str
     }
     try:
-        res = requests.post(url, headers=headers, json=payload).json()
-        if 'features' in res:
-            return round(res['features'][0]['properties']['totalTime'] / 60), ""
+        res = requests.post(url, headers=headers, json=payload)
+        # 🌟 버그 수정 2: 에러가 발생해도 프로그램이 뻗지 않도록 텍스트 변환 과정 추가
+        if res.status_code != 200:
+            return None, f"티맵 서버 에러 (코드: {res.status_code})"
+        
+        data = res.json()
+        if 'features' in data:
+            return round(data['features'][0]['properties']['totalTime'] / 60), ""
         else:
-            return None, str(res)
+            return None, str(data)
     except Exception as e: 
         return None, str(e)
 
@@ -150,7 +153,7 @@ else:
     st.title("🚗 나만의 내비게이션 Pro")
 
 # ==========================================
-# ⚙️ 공통 설정 (기존 출퇴근 기능 완벽 복구)
+# ⚙️ 공통 설정
 # ==========================================
 saved_home = st.query_params.get("home", "")
 saved_work = st.query_params.get("work", "")
@@ -177,43 +180,40 @@ google_tiles = "https://mt1.google.com/vt/lyrs=m&hl=ko&x={x}&y={y}&z={z}"
 # 탭 1: 기존 1:1 실시간 경로
 # ------------------------------------------
 with tab1:
-    # 🌟 출퇴근 라디오 버튼 복구!
-    route_choice = st.radio("🚗 조회할 경로 선택", ["1️⃣ 출근길 (집 ➔ 회사)", "2️⃣ 퇴근길 (회사 ➔ 집)", "3️⃣ 직접 설정"], index=0 if kst_now.hour < 12 else 1, horizontal=True)
+    route_choice1 = st.radio("🚗 조회할 경로 선택", ["1️⃣ 출근길 (집 ➔ 회사)", "2️⃣ 퇴근길 (회사 ➔ 집)", "3️⃣ 직접 설정"], index=0 if kst_now.hour < 12 else 1, horizontal=True, key="r1")
     
-    is_custom = False
-    if route_choice == "1️⃣ 출근길 (집 ➔ 회사)": start_target, end_target = home_address, work_address
-    elif route_choice == "2️⃣ 퇴근길 (회사 ➔ 집)": start_target, end_target = work_address, home_address
+    is_custom1 = False
+    if route_choice1 == "1️⃣ 출근길 (집 ➔ 회사)": start_target1, end_target1 = home_address, work_address
+    elif route_choice1 == "2️⃣ 퇴근길 (회사 ➔ 집)": start_target1, end_target1 = work_address, home_address
     else:
-        is_custom = True
-        start_target, end_target = "", ""
+        is_custom1 = True
+        start_target1, end_target1 = "", ""
 
-    if is_custom:
+    if is_custom1:
         ct1, ct2 = st.columns(2)
-        with ct1: start_target = st.text_input("출발지 직접 입력", placeholder="출발지를 입력하세요")
-        with ct2: end_target = st.text_input("도착지 직접 입력", placeholder="도착지를 입력하세요")
+        with ct1: start_target1 = st.text_input("출발지 직접 입력", placeholder="출발지를 입력하세요", key="st1")
+        with ct2: end_target1 = st.text_input("도착지 직접 입력", placeholder="도착지를 입력하세요", key="et1")
     else:
-        st.info(f"📍 **현재 선택된 경로:** {start_target if start_target else '(집 미입력)'} ➔ {end_target if end_target else '(회사 미입력)'}")
+        st.info(f"📍 **현재 선택된 경로:** {start_target1 if start_target1 else '(집 미입력)'} ➔ {end_target1 if end_target1 else '(회사 미입력)'}")
 
     if st.button("실시간 2파전 비교하기", type="primary", key="btn1", use_container_width=True):
-        if not start_target or not end_target:
+        if not start_target1 or not end_target1:
             st.warning("출발지와 도착지를 모두 정확히 설정해 주세요.")
         else:
             with st.spinner("경로를 탐색 중입니다..."):
-                sx, sy = get_kakao_coords(start_target)
-                ex, ey = get_kakao_coords(end_target)
+                sx, sy = get_kakao_coords(start_target1)
+                ex, ey = get_kakao_coords(end_target1)
                 if sx and ex:
                     k_dist, k_dur, k_seg = get_kakao_route(sx, sy, ex, ey)
                     t_dist, t_dur, t_seg = get_tmap_route(sx, sy, ex, ey)
-                    # 🌟 결과를 세션에 단단히 저장 (지도 안꺼짐)
                     st.session_state.t1_res = {
                         "k_dist": k_dist, "k_dur": k_dur, "k_seg": k_seg,
                         "t_dist": t_dist, "t_dur": t_dur, "t_seg": t_seg,
-                        "end_target": end_target, "ex": ex, "ey": ey, "sx": sx, "sy": sy
+                        "end_target": end_target1, "ex": ex, "ey": ey, "sx": sx, "sy": sy
                     }
                 else:
                     st.error("주소를 찾을 수 없습니다.")
 
-    # 🌟 저장된 결과가 있으면 항상 그려줌 (마우스를 만져도 유지됨)
     if st.session_state.t1_res:
         res = st.session_state.t1_res
         st.markdown('<div class="result-card">', unsafe_allow_html=True)
@@ -251,7 +251,7 @@ with tab1:
                 st_folium(m2, use_container_width=True, height=400, key="m2_t1")
 
 # ------------------------------------------
-# 탭 2: 다중 출발지 승부 (통합 지도 추가)
+# 탭 2: 다중 출발지 승부
 # ------------------------------------------
 with tab2:
     st.markdown("### 📍 어디서 출발하는게 가장 빠를까?")
@@ -279,7 +279,6 @@ with tab2:
                 
                 if results:
                     results = sorted(results, key=lambda x: x["avg"])
-                    # 순위 매기기 및 색상 부여 (1등 빨강, 2등 파랑, 3등 초록)
                     colors = ["#FF4B4B", "#1E90FF", "#03C75A"]
                     for i, res in enumerate(results):
                         res["rank"] = i + 1
@@ -287,13 +286,11 @@ with tab2:
                     
                     st.session_state.t2_res = {"results": results, "ex": ex, "ey": ey}
     
-    # 🌟 저장된 결과가 있으면 항상 그려줌 (지도 추가)
     if st.session_state.t2_res:
         res_data = st.session_state.t2_res
         results = res_data["results"]
         ex, ey = res_data["ex"], res_data["ey"]
         
-        # 1. 랭킹 카드 렌더링
         for res in results:
             rank, badge_color = res["rank"], res["color"]
             st.markdown(f"""
@@ -306,7 +303,6 @@ with tab2:
             </div>
             """, unsafe_allow_html=True)
             
-        # 2. 통합 다중 경로 지도 렌더링
         st.markdown("#### 🗺️ 순위별 경로 비교 지도")
         m_multi = folium.Map(location=[float(ey), float(ex)], zoom_start=11, tiles=google_tiles, attr="Google")
         end_icon = '<div style="background:#000000; color:white; border-radius:50%; width:26px; height:26px; display:flex; justify-content:center; align-items:center; font-weight:bold; font-size:12px; border:2px solid white;">도착</div>'
@@ -314,7 +310,6 @@ with tab2:
         
         all_coords_multi = []
         for res in results:
-            # 겹쳤을 때 보기 편하게 각 순위별 단일 색상으로 경로를 따옵니다.
             _, _, segs = get_kakao_route(res["sx"], res["sy"], ex, ey, solid_color=res["color"])
             if segs:
                 s_icon = f'<div style="background:{res["color"]}; color:white; border-radius:50%; width:28px; height:28px; display:flex; justify-content:center; align-items:center; font-weight:bold; font-size:12px; border:2px solid white;">{res["rank"]}등</div>'
@@ -328,42 +323,57 @@ with tab2:
         st_folium(m_multi, use_container_width=True, height=500, key="m_multi_t2")
 
 # ------------------------------------------
-# 탭 3: 티맵 타임머신 (버그 수정 완료)
+# 탭 3: 티맵 타임머신 (미래 시간대 예측)
 # ------------------------------------------
 with tab3:
     st.markdown("### 🔮 몇 시에 출발해야 안 막힐까?")
     st.info("티맵 빅데이터를 분석하여 **현재 시간부터 +3시간 뒤**까지의 교통량을 예측합니다.")
-    c1, c2 = st.columns(2)
-    with c1: t3_start = st.text_input("출발지", value=home_address, key="t3_s")
-    with c2: t3_end = st.text_input("도착지", value=work_address, key="t3_e")
     
+    # 🌟 타임머신 탭에도 출/퇴근길 라디오 버튼(경로 설정) 기능 완벽 이식!
+    route_choice3 = st.radio("🚗 타임머신 경로 선택", ["1️⃣ 출근길 (집 ➔ 회사)", "2️⃣ 퇴근길 (회사 ➔ 집)", "3️⃣ 직접 설정"], index=0 if kst_now.hour < 12 else 1, horizontal=True, key="r3")
+    
+    is_custom3 = False
+    if route_choice3 == "1️⃣ 출근길 (집 ➔ 회사)": start_target3, end_target3 = home_address, work_address
+    elif route_choice3 == "2️⃣ 퇴근길 (회사 ➔ 집)": start_target3, end_target3 = work_address, home_address
+    else:
+        is_custom3 = True
+        start_target3, end_target3 = "", ""
+
+    if is_custom3:
+        ct3, ct4 = st.columns(2)
+        with ct3: start_target3 = st.text_input("출발지 직접 입력", placeholder="출발지를 입력하세요", key="st3")
+        with ct4: end_target3 = st.text_input("도착지 직접 입력", placeholder="도착지를 입력하세요", key="et3")
+    else:
+        st.info(f"📍 **예측 경로:** {start_target3 if start_target3 else '(집 미입력)'} ➔ {end_target3 if end_target3 else '(회사 미입력)'}")
+
     if st.button("시간대별 예측 그래프 보기", type="primary", key="btn3", use_container_width=True):
-        with st.spinner("티맵 타임머신을 가동 중입니다... (약 5초 소요)"):
-            sx, sy = get_kakao_coords(t3_start)
-            ex, ey = get_kakao_coords(t3_end)
-            if sx and ex:
-                times, durations = [], []
-                err_log = ""
-                
-                # 지금, +1시간, +2시간, +3시간 계산
-                for i in range(4):
-                    target_time = kst_now + datetime.timedelta(hours=i)
-                    # 티맵 서버가 요구하는 정확한 날짜 포맷
-                    time_str = target_time.strftime("%Y-%m-%dT%H:%M:%S+0900") 
-                    label = "지금 출발" if i == 0 else f"+{i}시간 뒤 ({target_time.strftime('%H:%M')})"
+        if not start_target3 or not end_target3:
+            st.warning("출발지와 도착지를 모두 정확히 설정해 주세요.")
+        else:
+            with st.spinner("티맵 타임머신을 가동 중입니다... (약 5초 소요)"):
+                sx, sy = get_kakao_coords(start_target3)
+                ex, ey = get_kakao_coords(end_target3)
+                if sx and ex:
+                    times, durations = [], []
+                    err_log = ""
                     
-                    pred_mins, err = get_tmap_prediction(sx, sy, ex, ey, time_str)
-                    if pred_mins:
-                        times.append(label)
-                        durations.append(pred_mins)
-                    if err:
-                        err_log = err
+                    for i in range(4):
+                        target_time = kst_now + datetime.timedelta(hours=i)
+                        # 🌟 버그 수정 3: 티맵 서버가 좋아하는 완벽한 날짜/시간 포맷으로 변경 (타임존 제외)
+                        time_str = target_time.strftime("%Y-%m-%dT%H:%M:%S") 
+                        label = "지금 출발" if i == 0 else f"+{i}시간 뒤 ({target_time.strftime('%H:%M')})"
+                        
+                        pred_mins, err = get_tmap_prediction(sx, sy, ex, ey, time_str)
+                        if pred_mins:
+                            times.append(label)
+                            durations.append(pred_mins)
+                        if err:
+                            err_log = err
+                    
+                    st.session_state.t3_res = {"times": times, "durations": durations, "err": err_log}
+                else: 
+                    st.error("주소를 찾을 수 없습니다.")
                 
-                st.session_state.t3_res = {"times": times, "durations": durations, "err": err_log}
-            else: 
-                st.error("주소를 찾을 수 없습니다.")
-                
-    # 🌟 저장된 결과가 있으면 항상 그려줌
     if st.session_state.t3_res:
         res = st.session_state.t3_res
         if res["durations"]:
