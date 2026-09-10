@@ -65,12 +65,13 @@ except:
 def render_kakao_map(center_lat, center_lng, route_segments, markers, map_key=0, height=400):
     route_js = json.dumps(route_segments)
     markers_js = json.dumps(markers)
-    # 🌟 버그 픽스: 함수 정의를 먼저 하고, 스크립트를 동적으로 나중에 불러와 에러를 100% 차단합니다.
+    # 🌟 브라우저 보안 차단(Mixed Content)을 해결하는 HTTPS 강제 업그레이드 태그 삽입!
     html = f"""
     <!DOCTYPE html>
     <html>
     <head>
         <meta charset="utf-8">
+        <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
         <style> 
             html, body {{ width: 100%; height: 100%; margin: 0; padding: 0; background-color:#f8f9fa; }} 
             #map {{ width: 100%; height: 100%; display: none; }}
@@ -82,7 +83,6 @@ def render_kakao_map(center_lat, center_lng, route_segments, markers, map_key=0,
         <div id="loading">카카오 지도를 불러오는 중입니다...</div>
         <div id="map"></div>
         <script>
-            // 1. 지도를 그리는 함수를 먼저 완벽하게 준비해 둡니다.
             function initKakaoMap() {{
                 kakao.maps.load(function() {{
                     document.getElementById('loading').style.display = 'none';
@@ -122,7 +122,6 @@ def render_kakao_map(center_lat, center_lng, route_segments, markers, map_key=0,
                 }});
             }}
 
-            // 2. 함수 준비가 끝나면, 그제야 카카오 서버에 도구를 달라고 요청합니다. (동적 스크립트 로드)
             var script = document.createElement('script');
             script.type = 'text/javascript';
             script.src = "https://dapi.kakao.com/v2/maps/sdk.js?appkey={KAKAO_JS_KEY}&autoload=false";
@@ -142,11 +141,13 @@ def render_kakao_map(center_lat, center_lng, route_segments, markers, map_key=0,
 def render_tmap(center_lat, center_lng, route_segments, markers, map_key=0, height=400):
     route_js = json.dumps(route_segments)
     markers_js = json.dumps(markers)
+    # 🌟 티맵에도 혹시 모를 차단을 막기 위해 동일한 보안 태그를 추가했습니다.
     html = f"""
     <!DOCTYPE html>
     <html>
     <head>
         <meta charset="utf-8">
+        <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
         <style> html, body {{ width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; }} #map {{ width: 100%; height: 100%; }} </style>
         <script src="https://apis.openapi.sk.com/tmap/jsv2?version=1&appKey={TMAP_APP_KEY}"></script>
     </head>
