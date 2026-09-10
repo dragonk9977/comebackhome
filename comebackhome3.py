@@ -65,7 +65,7 @@ except:
 def render_kakao_map(center_lat, center_lng, route_segments, markers, map_key=0, height=400):
     route_js = json.dumps(route_segments)
     markers_js = json.dumps(markers)
-    # 🌟 질문자님이 가져오셨던 '성공 코드'의 로딩 방식(정적 태그 + setTimeout 대기)을 100% 적용했습니다!
+    # 🌟 버그 픽스: 함수 정의를 먼저 하고, 스크립트를 동적으로 나중에 불러와 에러를 100% 차단합니다.
     html = f"""
     <!DOCTYPE html>
     <html>
@@ -74,60 +74,65 @@ def render_kakao_map(center_lat, center_lng, route_segments, markers, map_key=0,
         <style> 
             html, body {{ width: 100%; height: 100%; margin: 0; padding: 0; background-color:#f8f9fa; }} 
             #map {{ width: 100%; height: 100%; display: none; }}
-            #loading {{ width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; color: #888; font-size: 13px; }}
+            #loading {{ width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; color: #888; font-size: 13px; text-align: center; line-height: 1.5; }}
         </style>
-        <script type="text/javascript" src="https://dapi.kakao.com/v2/maps/sdk.js?appkey={KAKAO_JS_KEY}&autoload=false" onload="onKakaoLoaded()" onerror="onKakaoError()"></script>
     </head>
     <body>
         <!-- Map Key: {map_key} -->
         <div id="loading">카카오 지도를 불러오는 중입니다...</div>
         <div id="map"></div>
         <script>
-            function onKakaoError() {{
-                document.getElementById('loading').innerHTML = '<div style="color:red; font-weight:bold; text-align:center;">카카오맵 로딩 실패.<br>로컬 테스트 중이시라면 도메인에 http://localhost:8501 도 추가해주세요.</div>';
-            }}
-            
-            function onKakaoLoaded() {{
-                // 🌟 스트림릿 환경에서 kakao 객체가 완전히 초기화될 때까지 0.1초 강제 대기 (핵심 비법)
-                setTimeout(function() {{
-                    kakao.maps.load(function() {{
-                        document.getElementById('loading').style.display = 'none';
-                        var container = document.getElementById('map');
-                        container.style.display = 'block';
-                        
-                        var options = {{ center: new kakao.maps.LatLng({center_lat}, {center_lng}), level: 7 }};
-                        var map = new kakao.maps.Map(container, options);
-                        var bounds = new kakao.maps.LatLngBounds();
-                        var hasBounds = false;
-                        
-                        function createMarker(color, text) {{
-                            var svg = `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30"><circle cx="15" cy="15" r="14" fill="${{color}}" stroke="white" stroke-width="2"/><text x="15" y="20" text-anchor="middle" font-size="12" font-weight="bold" fill="white">${{text}}</text></svg>`;
-                            return new kakao.maps.MarkerImage("data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg), new kakao.maps.Size(30, 30), {{offset: new kakao.maps.Point(15, 15)}});
-                        }}
+            // 1. 지도를 그리는 함수를 먼저 완벽하게 준비해 둡니다.
+            function initKakaoMap() {{
+                kakao.maps.load(function() {{
+                    document.getElementById('loading').style.display = 'none';
+                    var container = document.getElementById('map');
+                    container.style.display = 'block';
+                    
+                    var options = {{ center: new kakao.maps.LatLng({center_lat}, {center_lng}), level: 7 }};
+                    var map = new kakao.maps.Map(container, options);
+                    var bounds = new kakao.maps.LatLngBounds();
+                    var hasBounds = false;
+                    
+                    function createMarker(color, text) {{
+                        var svg = `<svg xmlns="http://www.w3.org/2000/svg" width="30" height="30"><circle cx="15" cy="15" r="14" fill="${{color}}" stroke="white" stroke-width="2"/><text x="15" y="20" text-anchor="middle" font-size="12" font-weight="bold" fill="white">${{text}}</text></svg>`;
+                        return new kakao.maps.MarkerImage("data:image/svg+xml;charset=UTF-8," + encodeURIComponent(svg), new kakao.maps.Size(30, 30), {{offset: new kakao.maps.Point(15, 15)}});
+                    }}
 
-                        var routes = {route_js};
-                        routes.forEach(function(seg) {{
-                            var path = [];
-                            seg.coords.forEach(function(c) {{
-                                var p = new kakao.maps.LatLng(c[0], c[1]);
-                                path.push(p); bounds.extend(p); hasBounds = true;
-                            }});
-                            if(path.length > 1) {{
-                                new kakao.maps.Polyline({{ map: map, path: path, strokeWeight: 5, strokeColor: seg.color, strokeOpacity: 0.9, strokeStyle: 'solid' }});
-                            }}
+                    var routes = {route_js};
+                    routes.forEach(function(seg) {{
+                        var path = [];
+                        seg.coords.forEach(function(c) {{
+                            var p = new kakao.maps.LatLng(c[0], c[1]);
+                            path.push(p); bounds.extend(p); hasBounds = true;
                         }});
-                        
-                        var markersData = {markers_js};
-                        markersData.forEach(function(m) {{
-                            var p = new kakao.maps.LatLng(m.coord[0], m.coord[1]);
-                            new kakao.maps.Marker({{ position: p, map: map, image: createMarker(m.color, m.text) }});
-                            bounds.extend(p); hasBounds = true;
-                        }});
-                        
-                        if(hasBounds) {{ map.setBounds(bounds, 40, 40, 40, 40); }}
+                        if(path.length > 1) {{
+                            new kakao.maps.Polyline({{ map: map, path: path, strokeWeight: 5, strokeColor: seg.color, strokeOpacity: 0.9, strokeStyle: 'solid' }});
+                        }}
                     }});
-                }}, 100);
+                    
+                    var markersData = {markers_js};
+                    markersData.forEach(function(m) {{
+                        var p = new kakao.maps.LatLng(m.coord[0], m.coord[1]);
+                        new kakao.maps.Marker({{ position: p, map: map, image: createMarker(m.color, m.text) }});
+                        bounds.extend(p); hasBounds = true;
+                    }});
+                    
+                    if(hasBounds) {{ map.setBounds(bounds, 40, 40, 40, 40); }}
+                }});
             }}
+
+            // 2. 함수 준비가 끝나면, 그제야 카카오 서버에 도구를 달라고 요청합니다. (동적 스크립트 로드)
+            var script = document.createElement('script');
+            script.type = 'text/javascript';
+            script.src = "https://dapi.kakao.com/v2/maps/sdk.js?appkey={KAKAO_JS_KEY}&autoload=false";
+            script.onload = function() {{
+                setTimeout(initKakaoMap, 100);
+            }};
+            script.onerror = function() {{
+                document.getElementById('loading').innerHTML = '<span style="color:red; font-weight:bold;">카카오맵 로딩 실패.<br>로컬 테스트 중이시라면 도메인에 http://localhost:8501 도 추가해주세요.</span>';
+            }};
+            document.head.appendChild(script);
         </script>
     </body>
     </html>
@@ -142,7 +147,7 @@ def render_tmap(center_lat, center_lng, route_segments, markers, map_key=0, heig
     <html>
     <head>
         <meta charset="utf-8">
-        <style> html, body {{ width: 100%; height: 100%; margin: 0; padding: 0; }} </style>
+        <style> html, body {{ width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; }} #map {{ width: 100%; height: 100%; }} </style>
         <script src="https://apis.openapi.sk.com/tmap/jsv2?version=1&appKey={TMAP_APP_KEY}"></script>
     </head>
     <body onload="initTmap()">
