@@ -20,7 +20,6 @@ custom_css = """
 <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
     
-    /* 기존에 span, div 등을 전부 덮어씌워서 아이콘이 깨지던 문제를 해결했습니다 */
     html, body, p, label, h1, h2, h3, h4, h5, h6, strong, b, li { 
         font-family: 'Pretendard', sans-serif !important; 
     }
@@ -144,6 +143,7 @@ def render_tmap(center_lat, center_lng, route_segments, markers, map_key=0, heig
     <html>
     <head>
         <meta charset="utf-8">
+        <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
         <style> html, body {{ width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; }} #map {{ width: 100%; height: 100%; }} </style>
         <script src="https://apis.openapi.sk.com/tmap/jsv2?version=1&appKey={TMAP_APP_KEY}"></script>
     </head>
@@ -266,27 +266,43 @@ if "custom_m" not in st.session_state: st.session_state.custom_m = 0
 if "prev_r3" not in st.session_state: st.session_state.prev_r3 = "1️⃣ 출근길 (집 ➔ 회사)"
 
 # ==========================================
-# 🖥️ 사이드바 (내 차 이미지 + 좌측 메뉴 네비게이션)
+# 🖥️ 상단 헤더 (타이틀 + 우측 앱 설정 팝업)
+# ==========================================
+header_col1, header_col2 = st.columns([4, 1])
+
+with header_col1:
+    # 🌟 이미지 로드 위치를 상단 헤더로 변경
+    if "uploaded_img" in st.session_state and st.session_state.uploaded_img:
+        b64_encoded = base64.b64encode(st.session_state.uploaded_img.read()).decode()
+        st.session_state.uploaded_img.seek(0) # 다시 읽을 수 있도록 포인터 초기화
+    else:
+        b64_encoded = base64.b64encode(open("mycar.jpg", "rb").read()).decode() if os.path.exists("mycar.jpg") else ""
+
+    if b64_encoded:
+        st.markdown(f'<div style="display:flex; align-items:center; margin-bottom:15px;"><img src="data:image/jpeg;base64,{b64_encoded}" style="width:60px; height:60px; border-radius:12px; object-fit:cover; margin-right:15px; box-shadow: 2px 2px 5px rgba(0,0,0,0.1);"><h1 style="margin:0;">나만의 내비게이션 Pro</h1></div>', unsafe_allow_html=True)
+    else:
+        st.title("🚗 나만의 내비게이션 Pro")
+
+with header_col2:
+    # 🌟 우측 상단 팝업(Popover) 안에 사진 업로드 기능 삽입
+    st.markdown("<div style='text-align: right; padding-top: 10px;'>", unsafe_allow_html=True)
+    with st.popover("⚙️ 앱 설정", use_container_width=True):
+        st.markdown("**🚘 내 차 이미지 변경**")
+        new_img = st.file_uploader("사진 업로드", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
+        if new_img:
+            st.session_state.uploaded_img = new_img
+            st.rerun() # 이미지 업로드 즉시 화면 갱신
+    st.markdown("</div>", unsafe_allow_html=True)
+
+# ==========================================
+# 🖥️ 사이드바 (핵심 메뉴 네비게이션)
 # ==========================================
 with st.sidebar:
-    st.markdown("### 🚘 내 차 이미지")
-    uploaded_img = st.file_uploader("사진 업로드", type=["jpg", "jpeg", "png"])
-b64_encoded = base64.b64encode(uploaded_img.read()).decode() if uploaded_img else (base64.b64encode(open("mycar.jpg", "rb").read()).decode() if os.path.exists("mycar.jpg") else "")
-
-with st.sidebar:
-    st.markdown("---")
     st.markdown("### 📌 메뉴 선택")
-    # 🌟 탭 기능을 사이드바 라디오 버튼으로 완벽 교체!
     menu_selection = st.radio("이동할 메뉴를 선택하세요", ["🗺️ 1:1 실시간 경로", "📍 다중 출발지 승부", "🔮 시간대별 타임머신"], label_visibility="collapsed")
 
-# 메인 화면 상단 타이틀
-if b64_encoded:
-    st.markdown(f'<div style="display:flex; align-items:center; margin-bottom:15px;"><img src="data:image/jpeg;base64,{b64_encoded}" style="width:60px; height:60px; border-radius:12px; object-fit:cover; margin-right:15px; box-shadow: 2px 2px 5px rgba(0,0,0,0.1);"><h1 style="margin:0;">나만의 내비게이션 Pro</h1></div>', unsafe_allow_html=True)
-else:
-    st.title("🚗 나만의 내비게이션 Pro")
-
 # ==========================================
-# ⚙️ 기본 주소 설정 (항상 상단에 고정)
+# ⚙️ 기본 주소 설정
 # ==========================================
 saved_home = st.query_params.get("home", "")
 saved_work = st.query_params.get("work", "")
