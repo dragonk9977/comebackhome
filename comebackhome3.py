@@ -14,15 +14,15 @@ import pandas as pd
 st.set_page_config(page_title="나만의 내비게이션 Pro", page_icon="🚗", layout="wide")
 
 # ==========================================
-# 🎨 UI/UX 디자인
+# 🎨 UI/UX 디자인 (폰트 깨짐 완벽 해결)
 # ==========================================
 custom_css = """
 <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
     
-    html, body, [class*="css"], p, span, div, label { 
+    /* 기존에 span, div 등을 전부 덮어씌워서 아이콘이 깨지던 문제를 해결했습니다 */
+    html, body, p, label, h1, h2, h3, h4, h5, h6, strong, b, li { 
         font-family: 'Pretendard', sans-serif !important; 
-        font-size: 14.5px !important; 
     }
     
     h1 { font-size: 26px !important; font-weight: 800 !important; letter-spacing: -1px; }
@@ -65,13 +65,11 @@ except:
 def render_kakao_map(center_lat, center_lng, route_segments, markers, map_key=0, height=400):
     route_js = json.dumps(route_segments)
     markers_js = json.dumps(markers)
-    # 🌟 브라우저 보안 차단(Mixed Content)을 해결하는 HTTPS 강제 업그레이드 태그 삽입!
     html = f"""
     <!DOCTYPE html>
     <html>
     <head>
         <meta charset="utf-8">
-        <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
         <style> 
             html, body {{ width: 100%; height: 100%; margin: 0; padding: 0; background-color:#f8f9fa; }} 
             #map {{ width: 100%; height: 100%; display: none; }}
@@ -141,13 +139,11 @@ def render_kakao_map(center_lat, center_lng, route_segments, markers, map_key=0,
 def render_tmap(center_lat, center_lng, route_segments, markers, map_key=0, height=400):
     route_js = json.dumps(route_segments)
     markers_js = json.dumps(markers)
-    # 🌟 티맵에도 혹시 모를 차단을 막기 위해 동일한 보안 태그를 추가했습니다.
     html = f"""
     <!DOCTYPE html>
     <html>
     <head>
         <meta charset="utf-8">
-        <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
         <style> html, body {{ width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; }} #map {{ width: 100%; height: 100%; }} </style>
         <script src="https://apis.openapi.sk.com/tmap/jsv2?version=1&appKey={TMAP_APP_KEY}"></script>
     </head>
@@ -270,20 +266,27 @@ if "custom_m" not in st.session_state: st.session_state.custom_m = 0
 if "prev_r3" not in st.session_state: st.session_state.prev_r3 = "1️⃣ 출근길 (집 ➔ 회사)"
 
 # ==========================================
-# 🖥️ 사이드바
+# 🖥️ 사이드바 (내 차 이미지 + 좌측 메뉴 네비게이션)
 # ==========================================
 with st.sidebar:
     st.markdown("### 🚘 내 차 이미지")
     uploaded_img = st.file_uploader("사진 업로드", type=["jpg", "jpeg", "png"])
 b64_encoded = base64.b64encode(uploaded_img.read()).decode() if uploaded_img else (base64.b64encode(open("mycar.jpg", "rb").read()).decode() if os.path.exists("mycar.jpg") else "")
 
+with st.sidebar:
+    st.markdown("---")
+    st.markdown("### 📌 메뉴 선택")
+    # 🌟 탭 기능을 사이드바 라디오 버튼으로 완벽 교체!
+    menu_selection = st.radio("이동할 메뉴를 선택하세요", ["🗺️ 1:1 실시간 경로", "📍 다중 출발지 승부", "🔮 시간대별 타임머신"], label_visibility="collapsed")
+
+# 메인 화면 상단 타이틀
 if b64_encoded:
     st.markdown(f'<div style="display:flex; align-items:center; margin-bottom:15px;"><img src="data:image/jpeg;base64,{b64_encoded}" style="width:60px; height:60px; border-radius:12px; object-fit:cover; margin-right:15px; box-shadow: 2px 2px 5px rgba(0,0,0,0.1);"><h1 style="margin:0;">나만의 내비게이션 Pro</h1></div>', unsafe_allow_html=True)
 else:
     st.title("🚗 나만의 내비게이션 Pro")
 
 # ==========================================
-# ⚙️ 기본 주소 설정
+# ⚙️ 기본 주소 설정 (항상 상단에 고정)
 # ==========================================
 saved_home = st.query_params.get("home", "")
 saved_work = st.query_params.get("work", "")
@@ -299,14 +302,13 @@ if work_address: st.query_params["work"] = work_address
 st.markdown("---")
 
 # ==========================================
-# 🚀 3개의 탭 기능 분리
+# 🚀 메뉴별 화면 라우팅 (사이드바 선택에 따라 내용 변경)
 # ==========================================
-tab1, tab2, tab3 = st.tabs(["🗺️ 1:1 실시간 경로", "📍 다중 출발지 승부", "🔮 시간대별 타임머신"])
 
 # ------------------------------------------
-# 탭 1: 기존 1:1 실시간 경로
+# 메뉴 1: 1:1 실시간 경로
 # ------------------------------------------
-with tab1:
+if menu_selection == "🗺️ 1:1 실시간 경로":
     route_choice1 = st.radio("🚗 조회할 경로 선택", ["1️⃣ 출근길 (집 ➔ 회사)", "2️⃣ 퇴근길 (회사 ➔ 집)", "3️⃣ 직접 설정"], index=0 if kst_now.hour < 12 else 1, horizontal=True, key="r1")
     
     is_custom1 = False
@@ -369,9 +371,9 @@ with tab1:
             render_tmap(res["ey"], res["ex"], res["t_seg"], markers, map_key=st.session_state.map_key, height=400)
 
 # ------------------------------------------
-# 탭 2: 다중 출발지 승부
+# 메뉴 2: 다중 출발지 승부
 # ------------------------------------------
-with tab2:
+elif menu_selection == "📍 다중 출발지 승부":
     st.markdown("### 📍 어디서 출발하는게 가장 빠를까?")
     t2_end = st.text_input("🎯 공통 도착지", value=work_address, key="t2_e")
     st.caption("출발 후보지 (비워두면 계산에서 제외됩니다)")
@@ -462,9 +464,9 @@ with tab2:
                 render_kakao_map(ey, ex, fresh_seg, mks, map_key=f"{st.session_state.map_key}_{i}", height=300)
 
 # ------------------------------------------
-# 탭 3: 티맵 타임머신
+# 메뉴 3: 시간대별 타임머신
 # ------------------------------------------
-with tab3:
+elif menu_selection == "🔮 시간대별 타임머신":
     st.markdown("### 🔮 몇 시에 출발해야 안 막힐까?")
     st.info("티맵 빅데이터를 분석하여 **현재 시간부터 +3시간 뒤** 및 **지정된 스케줄**의 교통량을 동시에 예측합니다.")
     
