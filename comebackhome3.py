@@ -20,6 +20,7 @@ custom_css = """
 <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
     
+    /* 기존에 span, div 등을 전부 덮어씌워서 아이콘이 깨지던 문제를 해결했습니다 */
     html, body, p, label, h1, h2, h3, h4, h5, h6, strong, b, li { 
         font-family: 'Pretendard', sans-serif !important; 
     }
@@ -69,6 +70,8 @@ def render_kakao_map(center_lat, center_lng, route_segments, markers, map_key=0,
     <html>
     <head>
         <meta charset="utf-8">
+        <!-- 🌟 실수로 누락되었던 마법의 보안 차단 해제 태그 완벽 복구!! -->
+        <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
         <style> 
             html, body {{ width: 100%; height: 100%; margin: 0; padding: 0; background-color:#f8f9fa; }} 
             #map {{ width: 100%; height: 100%; display: none; }}
@@ -143,6 +146,7 @@ def render_tmap(center_lat, center_lng, route_segments, markers, map_key=0, heig
     <html>
     <head>
         <meta charset="utf-8">
+        <!-- 🌟 티맵에도 혹시 모를 차단을 막기 위해 동일한 보안 태그를 추가했습니다. -->
         <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
         <style> html, body {{ width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; }} #map {{ width: 100%; height: 100%; }} </style>
         <script src="https://apis.openapi.sk.com/tmap/jsv2?version=1&appKey={TMAP_APP_KEY}"></script>
@@ -271,10 +275,9 @@ if "prev_r3" not in st.session_state: st.session_state.prev_r3 = "1️⃣ 출근
 header_col1, header_col2 = st.columns([4, 1])
 
 with header_col1:
-    # 🌟 이미지 로드 위치를 상단 헤더로 변경
     if "uploaded_img" in st.session_state and st.session_state.uploaded_img:
         b64_encoded = base64.b64encode(st.session_state.uploaded_img.read()).decode()
-        st.session_state.uploaded_img.seek(0) # 다시 읽을 수 있도록 포인터 초기화
+        st.session_state.uploaded_img.seek(0)
     else:
         b64_encoded = base64.b64encode(open("mycar.jpg", "rb").read()).decode() if os.path.exists("mycar.jpg") else ""
 
@@ -284,14 +287,13 @@ with header_col1:
         st.title("🚗 나만의 내비게이션 Pro")
 
 with header_col2:
-    # 🌟 우측 상단 팝업(Popover) 안에 사진 업로드 기능 삽입
     st.markdown("<div style='text-align: right; padding-top: 10px;'>", unsafe_allow_html=True)
     with st.popover("⚙️ 앱 설정", use_container_width=True):
         st.markdown("**🚘 내 차 이미지 변경**")
         new_img = st.file_uploader("사진 업로드", type=["jpg", "jpeg", "png"], label_visibility="collapsed")
         if new_img:
             st.session_state.uploaded_img = new_img
-            st.rerun() # 이미지 업로드 즉시 화면 갱신
+            st.rerun()
     st.markdown("</div>", unsafe_allow_html=True)
 
 # ==========================================
@@ -318,7 +320,7 @@ if work_address: st.query_params["work"] = work_address
 st.markdown("---")
 
 # ==========================================
-# 🚀 메뉴별 화면 라우팅 (사이드바 선택에 따라 내용 변경)
+# 🚀 메뉴별 화면 라우팅
 # ==========================================
 
 # ------------------------------------------
