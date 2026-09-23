@@ -20,9 +20,12 @@ custom_css = """
 <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
     
-    /* 기존에 span, div 등을 전부 덮어씌워서 아이콘이 깨지던 문제를 해결했습니다 */
+    /* 기존에 span, div 등을 전부 덮어씌워서 아이콘이 깨지던 문제를 해결했습니다.
+       + Material 아이콘 텍스트(예: expand_more, keyboard_double_arrow_right)가
+       하필 p/label 안에 들어있는 경우까지 대비해, 아이콘 전용 폰트를
+       fallback으로 같이 넣어 어떤 태그 안에 있어도 깨지지 않도록 처리 */
     html, body, p, label, h1, h2, h3, h4, h5, h6, strong, b, li { 
-        font-family: 'Pretendard', sans-serif !important; 
+        font-family: 'Pretendard', 'Material Symbols Rounded', sans-serif !important; 
     }
     
     h1 { font-size: 26px !important; font-weight: 800 !important; letter-spacing: -1px; }
@@ -297,11 +300,14 @@ with header_col2:
     st.markdown("</div>", unsafe_allow_html=True)
 
 # ==========================================
-# 🖥️ 사이드바 (핵심 메뉴 네비게이션)
+# 📌 메뉴 선택 (상단 가로 배치 - 모바일에서 사이드바를 열 필요가 없도록)
 # ==========================================
-with st.sidebar:
-    st.markdown("### 📌 메뉴 선택")
-    menu_selection = st.radio("이동할 메뉴를 선택하세요", ["🗺️ 1:1 실시간 경로", "📍 다중 출발지 승부", "🔮 시간대별 타임머신"], label_visibility="collapsed")
+menu_selection = st.radio(
+    "이동할 메뉴를 선택하세요",
+    ["🗺️ 1:1 실시간 경로", "📍 다중 출발지 승부", "🔮 시간대별 타임머신"],
+    horizontal=True,
+    label_visibility="collapsed"
+)
 
 # ==========================================
 # ⚙️ 기본 주소 설정
