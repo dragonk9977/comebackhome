@@ -202,10 +202,34 @@ def get_kakao_coords(address):
         if res.get('documents'): return res['documents'][0]['x'], res['documents'][0]['y']
     return None, None
 
-def get_kakao_route(start_x, start_y, end_x, end_y, solid_color=None):
+def search_kakao_places(query):
+    """검색어에 대한 후보 목록(최대 5개)을 반환. 사용자가 그중 하나를 고를 수 있게 하기 위함."""
+    if not query or not query.strip():
+        return []
+    headers = {"Authorization": f"KakaoAK {KAKAO_API_KEY}"}
+    for url in ["https://dapi.kakao.com/v2/local/search/keyword.json", "https://dapi.kakao.com/v2/local/search/address.json"]:
+        try:
+            res = requests.get(url, headers=headers, params={"query": query, "size": 5}).json()
+        except Exception:
+            continue
+        docs = res.get('documents', [])
+        if docs:
+            candidates = []
+            for d in docs:
+                name = d.get('place_name') or d.get('address_name', query)
+                addr = d.get('road_address_name') or d.get('address_name', '')
+                label = f"{name} ({addr})" if addr and addr != name else name
+                candidates.append({"label": label, "x": d['x'], "y": d['y']})
+            return candidates
+    return []
+
+def get_kakao_route(start_x, start_y, end_x, end_y, waypoints=None, priority="RECOMMEND", solid_color=None):
     url = "https://apis-navi.kakaomobility.com/v1/directions"
     headers = {"Authorization": f"KakaoAK {KAKAO_API_KEY}"}
-    params = {"origin": f"{start_x},{start_y}", "destination": f"{end_x},{end_y}", "priority": "RECOMMEND"}
+    params = {"origin": f"{start_x},{start_y}", "destination": f"{end_x},{end_y}", "priority": priority}
+    if waypoints:
+        # 카카오모빌리티 길찾기는 경유지를 최대 5개까지, "lng,lat|lng,lat" 형식으로 지원
+        params["waypoints"] = "|".join([f"{wx},{wy}" for wx, wy, _ in waypoints[:5]])
     res = requests.get(url, headers=headers, params=params).json()
     if res.get('routes'):
         route = res['routes'][0]
@@ -220,11 +244,15 @@ def get_kakao_route(start_x, start_y, end_x, end_y, solid_color=None):
         return distance_km, duration_min, segments
     return None, None, []
 
-def get_tmap_route(start_x, start_y, end_x, end_y):
+def get_tmap_route(start_x, start_y, end_x, end_y, waypoints=None, search_option="0"):
     url = "https://apis.openapi.sk.com/tmap/routes?version=1&format=json"
     headers = {"appKey": TMAP_APP_KEY, "Content-Type": "application/json"}
     payload = {"startX": str(start_x), "startY": str(start_y), "endX": str(end_x), "endY": str(end_y),
-               "startName": "S", "endName": "E", "reqCoordType": "WGS84GEO", "resCoordType": "WGS84GEO"}
+               "startName": "S", "endName": "E", "reqCoordType": "WGS84GEO", "resCoordType": "WGS84GEO",
+               "searchOption": search_option}
+    if waypoints:
+        # 티맵 경유지(passList)는 "lng,lat_lng,lat" 형식 (구간은 밑줄로 구분)
+        payload["passList"] = "_".join([f"{wx},{wy}" for wx, wy, _ in waypoints[:5]])
     try:
         res = requests.post(url, headers=headers, json=payload).json()
         if 'features' in res:
@@ -258,6 +286,28 @@ def format_time(mins):
     if mins is None: return "오류"
     h, m = mins // 60, mins % 60
     return f"{h}시간 {m}분" if h > 0 else f"{m}분"
+
+def address_picker(label, key, default_query=""):
+    """
+    주소를 입력받아 검색하고, 검색 결과 후보 중 사용자가 직접 선택하게 하는 UI.
+    반환값: (x, y, 선택된 라벨) — 아직 선택 전이면 (None, None, None)
+    """
+    query = st.text_input(label, value=default_query, key=f"{key}_query")
+    if st.button(f"🔍 검색", key=f"{key}_search_btn"):
+        st.session_state[f"{key}_candidates"] = search_kakao_places(query)
+        st.session_state[f"{key}_picked_idx"] = 0
+
+    candidates = st.session_state.get(f"{key}_candidates", [])
+    if candidates:
+        options = [c["label"] for c in candidates]
+        picked_label = st.selectbox(f"{label} 검색결과 중 선택", options, key=f"{key}_pick")
+        chosen = candidates[options.index(picked_label)]
+        return chosen["x"], chosen["y"], picked_label
+    elif query:
+        # 아직 검색 버튼을 안 눌렀으면 자동으로 첫 번째 결과를 임시로 사용 (기존 동작과 호환)
+        x, y = get_kakao_coords(query)
+        return x, y, query
+    return None, None, None
 
 # ==========================================
 # 🌟 세션 초기화
@@ -332,40 +382,74 @@ st.markdown("---")
 # ------------------------------------------
 # 메뉴 1: 1:1 실시간 경로
 # ------------------------------------------
+# ------------------------------------------
+# 메뉴 1: 1:1 실시간 경로
+# ------------------------------------------
 if menu_selection == "🗺️ 1:1 실시간 경로":
     route_choice1 = st.radio("🚗 조회할 경로 선택", ["1️⃣ 출근길 (집 ➔ 회사)", "2️⃣ 퇴근길 (회사 ➔ 집)", "3️⃣ 직접 설정"], index=0 if kst_now.hour < 12 else 1, horizontal=True, key="r1")
-    
-    is_custom1 = False
-    if route_choice1.startswith("1️⃣"): start_target1, end_target1 = home_address, work_address
-    elif route_choice1.startswith("2️⃣"): start_target1, end_target1 = work_address, home_address
-    else:
-        is_custom1 = True
-        start_target1, end_target1 = "", ""
 
-    if is_custom1:
-        ct1, ct2 = st.columns(2)
-        with ct1: start_target1 = st.text_input("출발지 직접 입력", placeholder="출발지를 입력하세요", key="st1")
-        with ct2: end_target1 = st.text_input("도착지 직접 입력", placeholder="도착지를 입력하세요", key="et1")
+    if route_choice1.startswith("1️⃣"): default_start, default_end = home_address, work_address
+    elif route_choice1.startswith("2️⃣"): default_start, default_end = work_address, home_address
+    else: default_start, default_end = "", ""
+
+    # --- ① 검색 결과 중 선택해서 출발/도착지 설정 ---
+    st.markdown("#### 📍 출발지 · 도착지")
+    ct1, ct2 = st.columns(2)
+    with ct1:
+        sx, sy, start_label = address_picker("출발지", key="t1_start", default_query=default_start)
+    with ct2:
+        ex, ey, end_label = address_picker("도착지", key="t1_end", default_query=default_end)
+
+    # --- ② 경유지 설정 ---
+    st.markdown("#### 🚩 경유지 (선택, 최대 3곳)")
+    if "t1_wp_count" not in st.session_state: st.session_state.t1_wp_count = 0
+    wcol1, wcol2, _ = st.columns([1, 1, 4])
+    with wcol1:
+        if st.button("➕ 경유지 추가", key="t1_wp_add", use_container_width=True):
+            if st.session_state.t1_wp_count < 3:
+                st.session_state.t1_wp_count += 1
+    with wcol2:
+        if st.button("➖ 경유지 삭제", key="t1_wp_del", use_container_width=True):
+            if st.session_state.t1_wp_count > 0:
+                st.session_state.t1_wp_count -= 1
+
+    waypoints1 = []
+    for i in range(st.session_state.t1_wp_count):
+        wx, wy, wlabel = address_picker(f"경유지 {i+1}", key=f"t1_wp{i}")
+        if wx and wy:
+            waypoints1.append((wx, wy, wlabel))
+
+    # --- ③ 경로 옵션 선택 ---
+    st.markdown("#### ⚙️ 경로 탐색 옵션")
+    route_option1 = st.radio(
+        "탐색 옵션", ["추천 경로", "최소시간", "최단거리"],
+        horizontal=True, key="t1_route_option", label_visibility="collapsed"
+    )
+    kakao_priority_map = {"추천 경로": "RECOMMEND", "최소시간": "TIME", "최단거리": "DISTANCE"}
+    tmap_option_map = {"추천 경로": "0", "최소시간": "2", "최단거리": "10"}
+
+    if start_label and end_label:
+        st.info(f"📍 **현재 선택된 경로:** {start_label} ➔ {end_label}" + (f" (경유지 {len(waypoints1)}곳 포함)" if waypoints1 else ""))
     else:
-        st.info(f"📍 **현재 선택된 경로:** {start_target1 if start_target1 else '(집 미입력)'} ➔ {end_target1 if end_target1 else '(회사 미입력)'}")
+        st.warning("출발지와 도착지를 검색해서 선택해주세요.")
 
     if st.button("카카오내비 vs Tmap", type="primary", key="btn1", use_container_width=True):
-        if not start_target1 or not end_target1:
+        if not sx or not ex:
             st.warning("출발지와 도착지를 모두 정확히 설정해 주세요.")
         else:
             with st.spinner("경로를 탐색 중입니다..."):
-                sx, sy = get_kakao_coords(start_target1)
-                ex, ey = get_kakao_coords(end_target1)
-                if sx and ex:
-                    k_dist, k_dur, k_seg = get_kakao_route(sx, sy, ex, ey)
-                    t_dist, t_dur, t_seg = get_tmap_route(sx, sy, ex, ey)
-                    st.session_state.t1_res = {
-                        "k_dist": k_dist, "k_dur": k_dur, "k_seg": k_seg,
-                        "t_dist": t_dist, "t_dur": t_dur, "t_seg": t_seg,
-                        "end_target": end_target1, "ex": ex, "ey": ey, "sx": sx, "sy": sy
-                    }
-                else:
-                    st.error("주소를 찾을 수 없습니다.")
+                k_dist, k_dur, k_seg = get_kakao_route(
+                    sx, sy, ex, ey, waypoints=waypoints1, priority=kakao_priority_map[route_option1]
+                )
+                t_dist, t_dur, t_seg = get_tmap_route(
+                    sx, sy, ex, ey, waypoints=waypoints1, search_option=tmap_option_map[route_option1]
+                )
+                st.session_state.t1_res = {
+                    "k_dist": k_dist, "k_dur": k_dur, "k_seg": k_seg,
+                    "t_dist": t_dist, "t_dur": t_dur, "t_seg": t_seg,
+                    "end_target": end_label, "ex": ex, "ey": ey, "sx": sx, "sy": sy,
+                    "waypoints": waypoints1, "route_option": route_option1
+                }
 
     if st.session_state.t1_res:
         res = st.session_state.t1_res
@@ -377,6 +461,7 @@ if menu_selection == "🗺️ 1:1 실시간 경로":
         rc2.metric("🔴 티맵", format_time(res["t_dur"]), f"{res['t_dist']} km" if res["t_dist"] else "")
         rc2.markdown(f'<a href="tmap://route?goalname={safe_end}&goalx={res["ex"]}&goaly={res["ey"]}" style="display:block; text-align:center; padding:10px; background:#EF4C35; color:#FFF; text-decoration:none; border-radius:8px; font-weight:700;">🔴 티맵 앱 열기</a>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
+        st.caption(f"탐색 옵션: {res.get('route_option', '추천 경로')}" + (f" · 경유지 {len(res.get('waypoints', []))}곳" if res.get('waypoints') else ""))
         
         if st.button("🔄 지도 정위치로 되돌리기", key="reset_map_1", use_container_width=True):
             st.session_state.map_key += 1
@@ -386,6 +471,8 @@ if menu_selection == "🗺️ 1:1 실시간 경로":
             {"coord": [res["sy"], res["sx"]], "color": "#1E90FF", "text": "S"},
             {"coord": [res["ey"], res["ex"]], "color": "#FF0000", "text": "E"}
         ]
+        for i, (wx, wy, _) in enumerate(res.get("waypoints", [])):
+            markers.append({"coord": [wy, wx], "color": "#8A2BE2", "text": f"경유{i+1}"})
         
         with map_c1:
             st.caption("🗺️ 카카오내비 최적 경로 (순정 카카오맵)")
