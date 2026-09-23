@@ -28,7 +28,18 @@ custom_css = """
         font-family: 'Pretendard', 'Material Symbols Rounded', sans-serif !important; 
     }
     
-    h1 { font-size: 26px !important; font-weight: 800 !important; letter-spacing: -1px; }
+    /* 🔧 "⚙️ 앱 설정" 팝오버 버튼의 펼치기 화살표 아이콘이 텍스트(expand_more)로
+       깨져 보이는 문제 수정. 이 아이콘은 알파벳으로만 이뤄져 있어서 폰트
+       fallback으로는 해결이 안 되므로, 텍스트를 숨기고 화살표를 직접 그려 넣음 */
+    [data-testid="stPopover"] [data-testid="stIconMaterial"] {
+        font-size: 0 !important;
+    }
+    [data-testid="stPopover"] [data-testid="stIconMaterial"]::after {
+        content: "▾";
+        font-family: sans-serif !important;
+        font-size: 16px !important;
+        color: inherit !important;
+    }
     h3 { font-size: 18px !important; font-weight: 700 !important; }
     
     div.stButton > button[kind="primary"] {
@@ -435,10 +446,11 @@ if menu_selection == "🗺️ 1:1 실시간 경로":
     tmap_option_map = {"추천 경로": "0", "최소시간": "2", "최단거리": "10"}
 
     if start_label and end_label:
-        route_chain = " ➔ ".join(
-            [start_label] + [wlabel.split(" (")[0] for _, _, wlabel in waypoints1] + [end_label]
-        )
-        st.info(f"📍 **현재 선택된 경로:** {route_chain}")
+        route_lines = [f"🔵 출발: **{start_label}**"]
+        for i, (_, _, wlabel) in enumerate(waypoints1):
+            route_lines.append(f"🚩 경유 {i+1}: **{wlabel.split(' (')[0]}**")
+        route_lines.append(f"🔴 도착: **{end_label}**")
+        st.info("📍 **현재 선택된 경로**\n\n" + "\n\n".join(route_lines))
     else:
         st.warning("출발지와 도착지를 검색해서 선택해주세요.")
 
