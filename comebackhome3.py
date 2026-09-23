@@ -435,7 +435,10 @@ if menu_selection == "🗺️ 1:1 실시간 경로":
     tmap_option_map = {"추천 경로": "0", "최소시간": "2", "최단거리": "10"}
 
     if start_label and end_label:
-        st.info(f"📍 **현재 선택된 경로:** {start_label} ➔ {end_label}" + (f" (경유지 {len(waypoints1)}곳 포함)" if waypoints1 else ""))
+        route_chain = " ➔ ".join(
+            [start_label] + [wlabel.split(" (")[0] for _, _, wlabel in waypoints1] + [end_label]
+        )
+        st.info(f"📍 **현재 선택된 경로:** {route_chain}")
     else:
         st.warning("출발지와 도착지를 검색해서 선택해주세요.")
 
@@ -474,7 +477,8 @@ if menu_selection == "🗺️ 1:1 실시간 경로":
         rc2.metric("🔴 티맵", format_time(res["t_dur"]), f"{res['t_dist']} km" if res["t_dist"] else "")
         rc2.markdown(f'<a href="tmap://route?goalname={safe_end}&goalx={res["ex"]}&goaly={res["ey"]}" style="display:block; text-align:center; padding:10px; background:#EF4C35; color:#FFF; text-decoration:none; border-radius:8px; font-weight:700;">🔴 티맵 앱 열기</a>', unsafe_allow_html=True)
         st.markdown('</div>', unsafe_allow_html=True)
-        st.caption(f"탐색 옵션: {res.get('route_option', '추천 경로')}" + (f" · 경유지 {len(res.get('waypoints', []))}곳" if res.get('waypoints') else ""))
+        wp_names = " → ".join(w[2].split(" (")[0] for w in res.get("waypoints", []))
+        st.caption(f"탐색 옵션: {res.get('route_option', '추천 경로')}" + (f" · 경유지: {wp_names}" if wp_names else ""))
         
         if st.button("🔄 지도 정위치로 되돌리기", key="reset_map_1", use_container_width=True):
             st.session_state.map_key += 1
