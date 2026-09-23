@@ -290,12 +290,15 @@ def format_time(mins):
 def address_picker(label, key, default_query=""):
     """
     주소를 입력받아 검색하고, 검색 결과 후보 중 사용자가 직접 선택하게 하는 UI.
+    별도 '검색' 버튼 없이, 입력값이 바뀌면(엔터/포커스 아웃 시) 자동으로 검색됨.
     반환값: (x, y, 선택된 라벨) — 아직 선택 전이면 (None, None, None)
     """
     query = st.text_input(label, value=default_query, key=f"{key}_query")
-    if st.button(f"🔍 검색", key=f"{key}_search_btn"):
+    prev_query_key = f"{key}_prev_query"
+
+    if query and query != st.session_state.get(prev_query_key):
+        st.session_state[prev_query_key] = query
         st.session_state[f"{key}_candidates"] = search_kakao_places(query)
-        st.session_state[f"{key}_picked_idx"] = 0
 
     candidates = st.session_state.get(f"{key}_candidates", [])
     if candidates:
@@ -303,10 +306,6 @@ def address_picker(label, key, default_query=""):
         picked_label = st.selectbox(f"{label} 검색결과 중 선택", options, key=f"{key}_pick")
         chosen = candidates[options.index(picked_label)]
         return chosen["x"], chosen["y"], picked_label
-    elif query:
-        # 아직 검색 버튼을 안 눌렀으면 자동으로 첫 번째 결과를 임시로 사용 (기존 동작과 호환)
-        x, y = get_kakao_coords(query)
-        return x, y, query
     return None, None, None
 
 # ==========================================
@@ -392,7 +391,14 @@ if menu_selection == "🗺️ 1:1 실시간 경로":
     elif route_choice1.startswith("2️⃣"): default_start, default_end = work_address, home_address
     else: default_start, default_end = "", ""
 
-    # --- ① 검색 결과 중 선택해서 출발/도착지 설정 ---
+    # 출근길/퇴근길/직접설정 전환 시, 이전 검색 상태를 초기화해서 새 기본값으로 다시 검색되게 함
+    if st.session_state.get("t1_prev_route_choice") != route_choice1:
+        st.session_state.t1_prev_route_choice = route_choice1
+        for k in ["t1_start", "t1_end"]:
+            for suffix in ["_query", "_prev_query", "_candidates", "_pick"]:
+                st.session_state.pop(f"{k}{suffix}", None)
+
+    # --- ① 검색 결과 중 선택해서 출발/도착지 설정 (입력 후 엔터 치면 자동 검색) ---
     st.markdown("#### 📍 출발지 · 도착지")
     ct1, ct2 = st.columns(2)
     with ct1:
@@ -433,10 +439,17 @@ if menu_selection == "🗺️ 1:1 실시간 경로":
     else:
         st.warning("출발지와 도착지를 검색해서 선택해주세요.")
 
-    if st.button("카카오내비 vs Tmap", type="primary", key="btn1", use_container_width=True):
+    # 출발지/도착지/경유지/경로옵션 중 하나라도 바뀌면 자동으로 재탐색
+    current_sig = (sx, sy, ex, ey, tuple((w[0], w[1]) for w in waypoints1), route_option1)
+    auto_trigger = bool(sx and ex) and st.session_state.get("t1_last_sig") != current_sig
+    manual_trigger = st.button("카카오내비 vs Tmap", type="primary", key="btn1", use_container_width=True)
+    st.caption("출발지·도착지·경유지·탐색옵션을 바꾸면 자동으로 재탐색됩니다. 값은 그대로 두고 실시간 정보만 새로고침하려면 버튼을 눌러주세요.")
+
+    if manual_trigger or auto_trigger:
         if not sx or not ex:
             st.warning("출발지와 도착지를 모두 정확히 설정해 주세요.")
         else:
+            st.session_state.t1_last_sig = current_sig
             with st.spinner("경로를 탐색 중입니다..."):
                 k_dist, k_dur, k_seg = get_kakao_route(
                     sx, sy, ex, ey, waypoints=waypoints1, priority=kakao_priority_map[route_option1]
@@ -486,30 +499,32 @@ if menu_selection == "🗺️ 1:1 실시간 경로":
 # ------------------------------------------
 elif menu_selection == "📍 다중 출발지 승부":
     st.markdown("### 📍 어디서 출발하는게 가장 빠를까?")
-    t2_end = st.text_input("🎯 공통 도착지", value=work_address, key="t2_e")
+    t2_ex, t2_ey, t2_end_label = address_picker("🎯 공통 도착지", key="t2_end", default_query=work_address)
     st.caption("출발 후보지 (비워두면 계산에서 제외됩니다)")
     c1, c2, c3 = st.columns(3)
-    with c1: t2_s1 = st.text_input("후보 1", value=home_address, key="t2_s1")
-    with c2: t2_s2 = st.text_input("후보 2", placeholder="예: 구리시 인창동", key="t2_s2")
-    with c3: t2_s3 = st.text_input("후보 3", placeholder="다른 출발지 입력", key="t2_s3")
+    with c1: t2_s1x, t2_s1y, t2_s1_label = address_picker("후보 1", key="t2_s1", default_query=home_address)
+    with c2: t2_s2x, t2_s2y, t2_s2_label = address_picker("후보 2", key="t2_s2")
+    with c3: t2_s3x, t2_s3y, t2_s3_label = address_picker("후보 3", key="t2_s3")
     
     if st.button("출발지별 소요시간 랭킹 보기", type="primary", key="btn2", use_container_width=True):
-        with st.spinner("각 출발지별 시간을 계산 중입니다..."):
-            ex, ey = get_kakao_coords(t2_end)
-            if not ex: st.error("도착지 주소를 확인해주세요.")
-            else:
+        if not t2_ex:
+            st.error("공통 도착지를 검색해서 선택해주세요.")
+        else:
+            with st.spinner("각 출발지별 시간을 계산 중입니다..."):
                 results = []
-                for idx, (name, s_addr) in enumerate([("후보 1", t2_s1), ("후보 2", t2_s2), ("후보 3", t2_s3)]):
-                    if s_addr.strip():
-                        sx, sy = get_kakao_coords(s_addr)
-                        if sx:
-                            _, k_dur, k_seg = get_kakao_route(sx, sy, ex, ey)
-                            _, t_dur, _ = get_tmap_route(sx, sy, ex, ey)
-                            avg_dur = ((k_dur or 0) + (t_dur or 0)) / 2
-                            results.append({
-                                "name": s_addr, "sx":sx, "sy":sy, 
-                                "kakao": k_dur, "tmap": t_dur, "avg": avg_dur, "k_seg": k_seg
-                            })
+                for name, sx, sy, label in [
+                    ("후보 1", t2_s1x, t2_s1y, t2_s1_label),
+                    ("후보 2", t2_s2x, t2_s2y, t2_s2_label),
+                    ("후보 3", t2_s3x, t2_s3y, t2_s3_label),
+                ]:
+                    if sx and sy:
+                        _, k_dur, k_seg = get_kakao_route(sx, sy, t2_ex, t2_ey)
+                        _, t_dur, _ = get_tmap_route(sx, sy, t2_ex, t2_ey)
+                        avg_dur = ((k_dur or 0) + (t_dur or 0)) / 2
+                        results.append({
+                            "name": label, "sx":sx, "sy":sy, 
+                            "kakao": k_dur, "tmap": t_dur, "avg": avg_dur, "k_seg": k_seg
+                        })
                 
                 if results:
                     results = sorted(results, key=lambda x: x["avg"])
@@ -518,7 +533,7 @@ elif menu_selection == "📍 다중 출발지 승부":
                         res["rank"] = i + 1
                         res["color"] = colors[i] if i < len(colors) else "#555555"
                     
-                    st.session_state.t2_res = {"results": results, "ex": ex, "ey": ey}
+                    st.session_state.t2_res = {"results": results, "ex": t2_ex, "ey": t2_ey}
     
     if st.session_state.t2_res:
         res_data = st.session_state.t2_res
@@ -592,27 +607,34 @@ elif menu_selection == "🔮 시간대별 타임머신":
         else:
             st.session_state.custom_h, st.session_state.custom_m = kst_now.hour, (kst_now.minute // 10) * 10
 
-    is_custom3 = False
-    if route_choice3.startswith("1️⃣"): start_target3, end_target3 = home_address, work_address
-    elif route_choice3.startswith("2️⃣"): start_target3, end_target3 = work_address, home_address
-    else:
-        is_custom3 = True
-        start_target3, end_target3 = "", ""
+    if route_choice3.startswith("1️⃣"): default_start3, default_end3 = home_address, work_address
+    elif route_choice3.startswith("2️⃣"): default_start3, default_end3 = work_address, home_address
+    else: default_start3, default_end3 = "", ""
 
-    if is_custom3:
-        ct3, ct4 = st.columns(2)
-        with ct3: start_target3 = st.text_input("출발지 직접 입력", placeholder="출발지를 입력하세요", key="st3")
-        with ct4: end_target3 = st.text_input("도착지 직접 입력", placeholder="도착지를 입력하세요", key="et3")
+    # 출근길/퇴근길/직접설정 전환 시 이전 검색 상태 초기화
+    if st.session_state.get("t3_prev_route_choice") != route_choice3:
+        st.session_state.t3_prev_route_choice = route_choice3
+        for k in ["t3_start", "t3_end"]:
+            for suffix in ["_query", "_prev_query", "_candidates", "_pick"]:
+                st.session_state.pop(f"{k}{suffix}", None)
+
+    ct3, ct4 = st.columns(2)
+    with ct3:
+        sx3, sy3, start_label3 = address_picker("출발지", key="t3_start", default_query=default_start3)
+    with ct4:
+        ex3, ey3, end_label3 = address_picker("도착지", key="t3_end", default_query=default_end3)
+
+    if start_label3 and end_label3:
+        st.info(f"📍 **예측 경로:** {start_label3} ➔ {end_label3}")
     else:
-        st.info(f"📍 **예측 경로:** {start_target3 if start_target3 else '(집 미입력)'} ➔ {end_target3 if end_target3 else '(회사 미입력)'}")
+        st.warning("출발지와 도착지를 검색해서 선택해주세요.")
 
     if st.button("시간대별 일괄 예측 조회하기", type="primary", key="btn3", use_container_width=True):
-        if not start_target3 or not end_target3:
+        if not sx3 or not ex3:
             st.warning("출발지와 도착지를 모두 정확히 설정해 주세요.")
         else:
             with st.spinner("티맵 타임머신을 가동 중입니다... (약 5초 소요)"):
-                sx, sy = get_kakao_coords(start_target3)
-                ex, ey = get_kakao_coords(end_target3)
+                sx, sy, ex, ey = sx3, sy3, ex3, ey3
                 if sx and ex:
                     times, durations = [], []
                     err_log = ""
