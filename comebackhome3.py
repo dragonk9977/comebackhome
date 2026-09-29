@@ -441,47 +441,6 @@ def format_time(mins):
     h, m = mins // 60, mins % 60
     return f"{h}시간 {m}분" if h > 0 else f"{m}분"
 
-# ==========================================
-# 💾 경로 프리셋 저장/불러오기
-# (같은 서버 인스턴스 안에서는 유지되지만, Streamlit Cloud 재배포 시 초기화될 수 있음)
-# ==========================================
-PRESET_FILE = "route_presets.json"
-
-def load_presets():
-    if os.path.exists(PRESET_FILE):
-        try:
-            with open(PRESET_FILE, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except Exception:
-            return []
-    return []
-
-def save_presets(presets):
-    try:
-        with open(PRESET_FILE, "w", encoding="utf-8") as f:
-            json.dump(presets, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
-
-def apply_preset_to_session(preset):
-    """저장된 프리셋 값을 address_picker가 쓰는 session_state 키에 직접 주입"""
-    def set_addr(key, label, x, y):
-        st.session_state[f"{key}_query"] = label
-        st.session_state[f"{key}_prev_query"] = label
-        st.session_state[f"{key}_candidates"] = [{"label": label, "x": x, "y": y}]
-        st.session_state[f"{key}_pick"] = label
-
-    set_addr("t1_start", preset["start_label"], preset["start_x"], preset["start_y"])
-    set_addr("t1_end", preset["end_label"], preset["end_x"], preset["end_y"])
-
-    waypoints = preset.get("waypoints", [])
-    st.session_state.t1_wp_count = len(waypoints)
-    for i, wp in enumerate(waypoints):
-        set_addr(f"t1_wp{i}", wp["label"], wp["x"], wp["y"])
-
-    if preset.get("route_option"):
-        st.session_state.t1_route_option = preset["route_option"]
-
 def address_picker(label, key, default_query=""):
     """
     주소를 입력받아 검색하고, 검색 결과 후보 중 사용자가 직접 선택하게 하는 UI.
@@ -634,49 +593,6 @@ if menu_selection == "🗺️ 1:1 실시간 경로":
         st.info("📍 **현재 선택된 경로**\n\n" + "\n\n".join(route_lines))
     else:
         st.warning("출발지와 도착지를 검색해서 선택해주세요.")
-
-    # --- 💾 경로 프리셋 저장/불러오기 ---
-    with st.expander("💾 자주 쓰는 경로 프리셋"):
-        presets = load_presets()
-        if presets:
-            preset_names = [p["name"] for p in presets]
-            pcol1, pcol2, pcol3 = st.columns([3, 1, 1])
-            with pcol1:
-                selected_preset_name = st.selectbox("저장된 프리셋", preset_names, key="t1_preset_select", label_visibility="collapsed")
-            with pcol2:
-                if st.button("📂 불러오기", key="t1_preset_load", use_container_width=True):
-                    preset = next(p for p in presets if p["name"] == selected_preset_name)
-                    apply_preset_to_session(preset)
-                    st.rerun()
-            with pcol3:
-                if st.button("🗑️ 삭제", key="t1_preset_delete", use_container_width=True):
-                    save_presets([p for p in presets if p["name"] != selected_preset_name])
-                    st.rerun()
-        else:
-            st.caption("아직 저장된 프리셋이 없어요.")
-
-        st.markdown("&nbsp;", unsafe_allow_html=True)
-        ncol1, ncol2 = st.columns([3, 1])
-        with ncol1:
-            new_preset_name = st.text_input("새 프리셋 이름", placeholder="예: 주말 처가댁", key="t1_preset_new_name", label_visibility="collapsed")
-        with ncol2:
-            if st.button("💾 저장", key="t1_preset_save", use_container_width=True):
-                if not new_preset_name.strip():
-                    st.warning("프리셋 이름을 입력해주세요.")
-                elif not (sx and ex):
-                    st.warning("출발지와 도착지를 먼저 설정해주세요.")
-                else:
-                    new_preset = {
-                        "name": new_preset_name.strip(),
-                        "start_label": start_label, "start_x": sx, "start_y": sy,
-                        "end_label": end_label, "end_x": ex, "end_y": ey,
-                        "waypoints": [{"label": w[2], "x": w[0], "y": w[1]} for w in waypoints1],
-                        "route_option": route_option1,
-                    }
-                    presets = [p for p in presets if p["name"] != new_preset["name"]] + [new_preset]
-                    save_presets(presets)
-                    st.success(f"'{new_preset['name']}' 프리셋으로 저장했어요.")
-        st.caption("⚠️ 이 서버가 재배포되면 프리셋이 초기화될 수 있어요.")
 
     # 출발지/도착지/경유지/경로옵션 중 하나라도 바뀌면 자동으로 재탐색
     current_sig = (sx, sy, ex, ey, tuple((w[0], w[1]) for w in waypoints1), route_option1)
