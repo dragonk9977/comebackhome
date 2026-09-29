@@ -57,12 +57,30 @@ custom_css = """
     }
     h3 { font-size: 18px !important; font-weight: 700 !important; }
 
-    /* 🌙 입력창 / 선택박스 다크화 */
-    .stTextInput input, .stSelectbox div[data-baseweb="select"] > div,
-    .stNumberInput input {
+    /* 🌙 컴팩트한 pill 스타일 검색창 */
+    .stTextInput input, .stNumberInput input {
+        height: 40px !important;
+        border-radius: 20px !important;
+        padding: 0 16px !important;
         background-color: var(--bg-card) !important;
         color: var(--text-main) !important;
         border: 1px solid var(--border-card) !important;
+        font-size: 14px !important;
+    }
+    .stTextInput input:focus, .stNumberInput input:focus {
+        border-color: #FEE500 !important;
+        box-shadow: 0 0 0 2px rgba(254,229,0,0.2) !important;
+    }
+    .stTextInput label, .stSelectbox label, .stNumberInput label {
+        font-size: 12px !important; color: var(--text-muted) !important;
+        margin-bottom: 2px !important;
+    }
+    .stSelectbox div[data-baseweb="select"] > div {
+        background-color: var(--bg-card) !important;
+        color: var(--text-main) !important;
+        border: 1px solid var(--border-card) !important;
+        border-radius: 20px !important;
+        min-height: 40px !important;
     }
     [data-baseweb="popover"] li, [data-baseweb="menu"] li {
         background-color: var(--bg-card) !important;
@@ -73,20 +91,41 @@ custom_css = """
     [data-testid="stAlert"] {
         background-color: var(--bg-card) !important;
         border: 1px solid var(--border-card) !important;
+        border-radius: 12px !important;
     }
     [data-testid="stAlert"] p { color: var(--text-main) !important; }
 
-    
+    /* 🌙 위젯 사이 여백을 좁혀서 전체적으로 더 컴팩트하게 */
+    [data-testid="stVerticalBlock"] { gap: 0.6rem !important; }
+    .element-container { margin-bottom: 0 !important; }
+
+    /* 🌙 가로 라디오를 세그먼트 탭(pill) 스타일로 — 기본 원형 라디오 숨기고 라벨을 버튼처럼 */
+    div[role="radiogroup"] { gap: 6px !important; }
+    div[role="radiogroup"] label {
+        background: var(--bg-card) !important; border: 1px solid var(--border-card) !important;
+        border-radius: 18px !important; padding: 6px 14px !important; margin: 0 !important;
+        transition: 0.15s;
+    }
+    div[role="radiogroup"] label:has(input:checked) {
+        background: #FEE500 !important; border-color: #FEE500 !important;
+    }
+    div[role="radiogroup"] label:has(input:checked) p { color: #191919 !important; font-weight: 700 !important; }
+    div[role="radiogroup"] label > div:first-child { display: none !important; }
+
+    div.stButton > button {
+        border-radius: 20px !important;
+        height: 40px !important;
+    }
     div.stButton > button[kind="primary"] {
         background-color: #FEE500 !important; color: #191919 !important;
-        font-weight: 800 !important; border-radius: 8px !important;
-        padding: 8px 0 !important; box-shadow: 0 4px 10px rgba(254,229,0,0.15) !important;
+        font-weight: 800 !important;
+        box-shadow: 0 4px 10px rgba(254,229,0,0.15) !important;
         border: none !important; transition: 0.2s;
     }
     div.stButton > button[kind="primary"]:hover { transform: translateY(-2px) !important; }
     div.stButton > button[kind="secondary"] {
         background-color: var(--bg-card) !important; color: var(--text-main) !important;
-        border: 1px solid var(--border-card) !important; border-radius: 8px !important;
+        border: 1px solid var(--border-card) !important;
     }
 
     .result-card {
