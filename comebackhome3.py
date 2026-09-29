@@ -21,10 +21,10 @@ custom_css = """
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
 
     :root {
-        --bg-page: #1b1e27;
-        --bg-card: #262a35;
-        --bg-card-hover: #2f3441;
-        --border-card: #383d4d;
+        --bg-page: #2b2f3b;
+        --bg-card: #383d4b;
+        --bg-card-hover: #434958;
+        --border-card: #4d5364;
         --text-main: #e8e9ed;
         --text-muted: #9aa0ad;
     }
