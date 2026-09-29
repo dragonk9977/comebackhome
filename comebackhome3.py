@@ -19,6 +19,20 @@ st.set_page_config(page_title="나만의 내비게이션 Pro", page_icon="🚗",
 custom_css = """
 <style>
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+
+    :root {
+        --bg-page: #10131a;
+        --bg-card: #1b1f2a;
+        --bg-card-hover: #232838;
+        --border-card: #2a2f3d;
+        --text-main: #e8e9ed;
+        --text-muted: #9aa0ad;
+    }
+
+    /* 🌙 전체 다크 테마 배경 */
+    html, body, .stApp, [data-testid="stAppViewContainer"], [data-testid="stHeader"] {
+        background-color: var(--bg-page) !important;
+    }
     
     /* 기존에 span, div 등을 전부 덮어씌워서 아이콘이 깨지던 문제를 해결했습니다.
        + Material 아이콘 텍스트(예: expand_more, keyboard_double_arrow_right)가
@@ -26,6 +40,7 @@ custom_css = """
        fallback으로 같이 넣어 어떤 태그 안에 있어도 깨지지 않도록 처리 */
     html, body, p, label, h1, h2, h3, h4, h5, h6, strong, b, li { 
         font-family: 'Pretendard', 'Material Symbols Rounded', sans-serif !important; 
+        color: var(--text-main) !important;
     }
     
     /* 🔧 "⚙️ 앱 설정" 팝오버 버튼의 펼치기 화살표 아이콘이 텍스트(expand_more)로
@@ -41,18 +56,42 @@ custom_css = """
         color: inherit !important;
     }
     h3 { font-size: 18px !important; font-weight: 700 !important; }
+
+    /* 🌙 입력창 / 선택박스 다크화 */
+    .stTextInput input, .stSelectbox div[data-baseweb="select"] > div,
+    .stNumberInput input {
+        background-color: var(--bg-card) !important;
+        color: var(--text-main) !important;
+        border: 1px solid var(--border-card) !important;
+    }
+    [data-baseweb="popover"] li, [data-baseweb="menu"] li {
+        background-color: var(--bg-card) !important;
+        color: var(--text-main) !important;
+    }
+
+    /* 🌙 st.info / st.warning / st.success 알림 박스 다크화 */
+    [data-testid="stAlert"] {
+        background-color: var(--bg-card) !important;
+        border: 1px solid var(--border-card) !important;
+    }
+    [data-testid="stAlert"] p { color: var(--text-main) !important; }
+
     
     div.stButton > button[kind="primary"] {
-        background-color: #111111 !important; color: #FFFFFF !important;
-        font-weight: 700 !important; border-radius: 8px !important;
-        padding: 8px 0 !important; box-shadow: 0 4px 6px rgba(0,0,0,0.1) !important;
-        transition: 0.2s;
+        background-color: #FEE500 !important; color: #191919 !important;
+        font-weight: 800 !important; border-radius: 8px !important;
+        padding: 8px 0 !important; box-shadow: 0 4px 10px rgba(254,229,0,0.15) !important;
+        border: none !important; transition: 0.2s;
     }
     div.stButton > button[kind="primary"]:hover { transform: translateY(-2px) !important; }
+    div.stButton > button[kind="secondary"] {
+        background-color: var(--bg-card) !important; color: var(--text-main) !important;
+        border: 1px solid var(--border-card) !important; border-radius: 8px !important;
+    }
 
     .result-card {
-        background: #ffffff; border: 1px solid #eaeaea; border-radius: 12px;
-        padding: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin-bottom: 12px;
+        background: var(--bg-card); border: 1px solid var(--border-card); border-radius: 12px;
+        padding: 15px; margin-bottom: 12px;
     }
     .rank-badge {
         color: white; padding: 4px 10px; border-radius: 20px; font-weight: 800; font-size: 12px; margin-right: 5px;
@@ -60,22 +99,22 @@ custom_css = """
 
     /* 🏆 4사 비교 스코어보드에서 아이디어를 가져온 결과 카드 스타일 */
     .scoreboard-card {
-        background: #ffffff; border: 2px solid #eaeaea; border-radius: 14px;
-        padding: 16px; text-align: center; position: relative;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.05); transition: 0.2s;
+        background: var(--bg-card); border: 2px solid var(--border-card); border-radius: 14px;
+        padding: 16px; text-align: center; position: relative; transition: 0.2s;
     }
-    .scoreboard-card.is-winner { border-color: #22C55E; box-shadow: 0 4px 15px rgba(34,197,94,0.15); }
+    .scoreboard-card.is-winner { border-color: #22C55E; box-shadow: 0 0 0 1px #22C55E inset; }
     .provider-badge {
         display: inline-flex; align-items: center; justify-content: center;
         width: 22px; height: 22px; border-radius: 6px; color: white;
         font-size: 12px; font-weight: 800; margin-right: 6px;
     }
+    .provider-badge.badge-k { color: #191919; }
     .winner-pill {
-        background: #22C55E; color: white; font-size: 11px; font-weight: 800;
+        background: #22C55E; color: #06210f; font-size: 11px; font-weight: 800;
         border-radius: 12px; padding: 2px 9px; margin-left: 6px;
     }
-    .scoreboard-time { font-size: 26px; font-weight: 800; color: #111; margin: 4px 0 2px 0; }
-    .scoreboard-dist { font-size: 13px; color: #777; margin-bottom: 10px; }
+    .scoreboard-time { font-size: 26px; font-weight: 800; color: var(--text-main); margin: 4px 0 2px 0; }
+    .scoreboard-dist { font-size: 13px; color: var(--text-muted); margin-bottom: 10px; }
 </style>
 """
 st.markdown(custom_css, unsafe_allow_html=True)
@@ -591,7 +630,7 @@ if menu_selection == "🗺️ 1:1 실시간 경로":
         with rc1:
             st.markdown(f"""
             <div class="scoreboard-card {'is-winner' if k_is_winner else ''}">
-                <div><span class="provider-badge" style="background:#F5C518;">K</span><strong>카카오내비</strong>{' <span class="winner-pill">⚡ 더 빠름</span>' if k_is_winner else ''}</div>
+                <div><span class="provider-badge badge-k" style="background:#F5C518;">K</span><strong>카카오내비</strong>{' <span class="winner-pill">⚡ 더 빠름</span>' if k_is_winner else ''}</div>
                 <div class="scoreboard-time">{format_time(k_dur)}</div>
                 <div class="scoreboard-dist">{f"{res['k_dist']} km" if res["k_dist"] else "-"}</div>
                 <a href="https://map.kakao.com/link/to/{safe_end},{res['ey']},{res['ex']}" target="_blank" style="display:block; text-align:center; padding:10px; background:#FEE500; color:#000; text-decoration:none; border-radius:8px; font-weight:700;">🟡 카카오 앱 열기</a>
