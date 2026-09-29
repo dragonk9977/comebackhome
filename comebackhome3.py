@@ -143,6 +143,14 @@ custom_css = """
         background: var(--bg-card); border: 1px solid var(--border-card); border-radius: 12px;
         padding: 15px; margin-bottom: 12px;
     }
+
+    /* 🌙 st.container(border=True) 카드를 다크 테마에 맞춰 스타일링 */
+    [data-testid="stVerticalBlockBorderWrapper"] > div > [data-testid="stVerticalBlock"] {
+        background: var(--bg-card) !important;
+        border: 1px solid var(--border-card) !important;
+        border-radius: 14px !important;
+        padding: 18px !important;
+    }
     .rank-badge {
         color: white; padding: 4px 10px; border-radius: 20px; font-weight: 800; font-size: 12px; margin-right: 5px;
     }
@@ -536,137 +544,141 @@ st.markdown("---")
 # 메뉴 1: 1:1 실시간 경로
 # ------------------------------------------
 if menu_selection == "🗺️ 1:1 실시간 경로":
-    route_choice1 = st.radio("🚗 조회할 경로 선택", ["1️⃣ 출근길 (집 ➔ 회사)", "2️⃣ 퇴근길 (회사 ➔ 집)", "3️⃣ 직접 설정"], index=0 if kst_now.hour < 12 else 1, horizontal=True, key="r1")
 
-    if route_choice1.startswith("1️⃣"): default_start, default_end = home_address, work_address
-    elif route_choice1.startswith("2️⃣"): default_start, default_end = work_address, home_address
-    else: default_start, default_end = "", ""
+    # ================= 카드 ① 여정 =================
+    with st.container(border=True):
+        st.markdown("#### 🧭 여정")
+        route_choice1 = st.radio("🚗 조회할 경로 선택", ["1️⃣ 출근길 (집 ➔ 회사)", "2️⃣ 퇴근길 (회사 ➔ 집)", "3️⃣ 직접 설정"], index=0 if kst_now.hour < 12 else 1, horizontal=True, key="r1")
 
-    # 출근길/퇴근길/직접설정 전환 시, 이전 검색 상태를 초기화해서 새 기본값으로 다시 검색되게 함
-    if st.session_state.get("t1_prev_route_choice") != route_choice1:
-        st.session_state.t1_prev_route_choice = route_choice1
-        for k in ["t1_start", "t1_end"]:
-            for suffix in ["_query", "_prev_query", "_candidates", "_pick"]:
-                st.session_state.pop(f"{k}{suffix}", None)
+        if route_choice1.startswith("1️⃣"): default_start, default_end = home_address, work_address
+        elif route_choice1.startswith("2️⃣"): default_start, default_end = work_address, home_address
+        else: default_start, default_end = "", ""
 
-    # --- ① 검색 결과 중 선택해서 출발/도착지 설정 (입력 후 엔터 치면 자동 검색) ---
-    st.markdown("#### 📍 출발지 · 도착지")
-    ct1, ct2 = st.columns(2)
-    with ct1:
-        sx, sy, start_label = address_picker("출발지", key="t1_start", default_query=default_start)
-    with ct2:
-        ex, ey, end_label = address_picker("도착지", key="t1_end", default_query=default_end)
+        # 출근길/퇴근길/직접설정 전환 시, 이전 검색 상태를 초기화해서 새 기본값으로 다시 검색되게 함
+        if st.session_state.get("t1_prev_route_choice") != route_choice1:
+            st.session_state.t1_prev_route_choice = route_choice1
+            for k in ["t1_start", "t1_end"]:
+                for suffix in ["_query", "_prev_query", "_candidates", "_pick"]:
+                    st.session_state.pop(f"{k}{suffix}", None)
 
-    # --- ② 경유지 설정 ---
-    st.markdown("#### 🚩 경유지 (선택, 최대 3곳)")
-    if "t1_wp_count" not in st.session_state: st.session_state.t1_wp_count = 0
-    wcol1, wcol2, _ = st.columns([1, 1, 4])
-    with wcol1:
-        if st.button("➕ 경유지 추가", key="t1_wp_add", use_container_width=True):
-            if st.session_state.t1_wp_count < 3:
-                st.session_state.t1_wp_count += 1
-    with wcol2:
-        if st.button("➖ 경유지 삭제", key="t1_wp_del", use_container_width=True):
-            if st.session_state.t1_wp_count > 0:
-                st.session_state.t1_wp_count -= 1
+        ct1, ct2 = st.columns(2)
+        with ct1:
+            sx, sy, start_label = address_picker("출발지", key="t1_start", default_query=default_start)
+        with ct2:
+            ex, ey, end_label = address_picker("도착지", key="t1_end", default_query=default_end)
 
-    waypoints1 = []
-    for i in range(st.session_state.t1_wp_count):
-        wx, wy, wlabel = address_picker(f"경유지 {i+1}", key=f"t1_wp{i}")
-        if wx and wy:
-            waypoints1.append((wx, wy, wlabel))
+        with st.expander("🚩 경유지 추가 (선택, 최대 3곳)"):
+            if "t1_wp_count" not in st.session_state: st.session_state.t1_wp_count = 0
+            wcol1, wcol2, _ = st.columns([1, 1, 4])
+            with wcol1:
+                if st.button("➕ 경유지 추가", key="t1_wp_add", use_container_width=True):
+                    if st.session_state.t1_wp_count < 3:
+                        st.session_state.t1_wp_count += 1
+            with wcol2:
+                if st.button("➖ 경유지 삭제", key="t1_wp_del", use_container_width=True):
+                    if st.session_state.t1_wp_count > 0:
+                        st.session_state.t1_wp_count -= 1
 
-    # --- ③ 경로 옵션 선택 ---
-    st.markdown("#### ⚙️ 경로 탐색 옵션")
-    route_option1 = st.radio(
-        "탐색 옵션", ["추천 경로", "최소시간", "최단거리"],
-        horizontal=True, key="t1_route_option", label_visibility="collapsed"
-    )
-    kakao_priority_map = {"추천 경로": "RECOMMEND", "최소시간": "TIME", "최단거리": "DISTANCE"}
-    tmap_option_map = {"추천 경로": "0", "최소시간": "2", "최단거리": "10"}
+            waypoints1 = []
+            for i in range(st.session_state.t1_wp_count):
+                wx, wy, wlabel = address_picker(f"경유지 {i+1}", key=f"t1_wp{i}")
+                if wx and wy:
+                    waypoints1.append((wx, wy, wlabel))
 
-    if start_label and end_label:
-        route_lines = [f"🔵 출발: **{start_label}**"]
-        for i, (_, _, wlabel) in enumerate(waypoints1):
-            route_lines.append(f"🚩 경유 {i+1}: **{wlabel.split(' (')[0]}**")
-        route_lines.append(f"🔴 도착: **{end_label}**")
-        st.info("📍 **현재 선택된 경로**\n\n" + "\n\n".join(route_lines))
-    else:
-        st.warning("출발지와 도착지를 검색해서 선택해주세요.")
-
-    # 출발지/도착지/경유지/경로옵션 중 하나라도 바뀌면 자동으로 재탐색
-    current_sig = (sx, sy, ex, ey, tuple((w[0], w[1]) for w in waypoints1), route_option1)
-    auto_trigger = bool(sx and ex) and st.session_state.get("t1_last_sig") != current_sig
-    manual_trigger = st.button("카카오내비 vs Tmap", type="primary", key="btn1", use_container_width=True)
-    st.caption("출발지·도착지·경유지·탐색옵션을 바꾸면 자동으로 재탐색됩니다. 값은 그대로 두고 실시간 정보만 새로고침하려면 버튼을 눌러주세요.")
-
-    if manual_trigger or auto_trigger:
-        if not sx or not ex:
-            st.warning("출발지와 도착지를 모두 정확히 설정해 주세요.")
+        if start_label and end_label:
+            route_lines = [f"🔵 출발: **{start_label}**"]
+            for i, (_, _, wlabel) in enumerate(waypoints1):
+                route_lines.append(f"🚩 경유 {i+1}: **{wlabel.split(' (')[0]}**")
+            route_lines.append(f"🔴 도착: **{end_label}**")
+            st.info("\n\n".join(route_lines))
         else:
-            st.session_state.t1_last_sig = current_sig
-            with st.spinner("경로를 탐색 중입니다..."):
-                k_dist, k_dur, k_seg = get_kakao_route(
-                    sx, sy, ex, ey, waypoints=waypoints1, priority=kakao_priority_map[route_option1]
-                )
-                t_dist, t_dur, t_seg = get_tmap_route(
-                    sx, sy, ex, ey, waypoints=waypoints1, search_option=tmap_option_map[route_option1]
-                )
-                st.session_state.t1_res = {
-                    "k_dist": k_dist, "k_dur": k_dur, "k_seg": k_seg,
-                    "t_dist": t_dist, "t_dur": t_dur, "t_seg": t_seg,
-                    "end_target": end_label, "ex": ex, "ey": ey, "sx": sx, "sy": sy,
-                    "waypoints": waypoints1, "route_option": route_option1
-                }
+            st.warning("출발지와 도착지를 검색해서 선택해주세요.")
 
+    # ================= 카드 ② 탐색 옵션 & 실행 =================
+    with st.container(border=True):
+        st.markdown("#### ⚙️ 탐색 옵션")
+        route_option1 = st.radio(
+            "탐색 옵션", ["추천 경로", "최소시간", "최단거리"],
+            horizontal=True, key="t1_route_option", label_visibility="collapsed"
+        )
+        kakao_priority_map = {"추천 경로": "RECOMMEND", "최소시간": "TIME", "최단거리": "DISTANCE"}
+        tmap_option_map = {"추천 경로": "0", "최소시간": "2", "최단거리": "10"}
+
+        current_sig = (sx, sy, ex, ey, tuple((w[0], w[1]) for w in waypoints1), route_option1)
+        auto_trigger = bool(sx and ex) and st.session_state.get("t1_last_sig") != current_sig
+        manual_trigger = st.button("카카오내비 vs Tmap", type="primary", key="btn1", use_container_width=True)
+        st.caption("출발지·도착지·경유지·탐색옵션을 바꾸면 자동으로 재탐색됩니다. 값은 그대로 두고 실시간 정보만 새로고침하려면 버튼을 눌러주세요.")
+
+        if manual_trigger or auto_trigger:
+            if not sx or not ex:
+                st.warning("출발지와 도착지를 모두 정확히 설정해 주세요.")
+            else:
+                st.session_state.t1_last_sig = current_sig
+                with st.spinner("경로를 탐색 중입니다..."):
+                    k_dist, k_dur, k_seg = get_kakao_route(
+                        sx, sy, ex, ey, waypoints=waypoints1, priority=kakao_priority_map[route_option1]
+                    )
+                    t_dist, t_dur, t_seg = get_tmap_route(
+                        sx, sy, ex, ey, waypoints=waypoints1, search_option=tmap_option_map[route_option1]
+                    )
+                    st.session_state.t1_res = {
+                        "k_dist": k_dist, "k_dur": k_dur, "k_seg": k_seg,
+                        "t_dist": t_dist, "t_dur": t_dur, "t_seg": t_seg,
+                        "end_target": end_label, "ex": ex, "ey": ey, "sx": sx, "sy": sy,
+                        "waypoints": waypoints1, "route_option": route_option1
+                    }
+
+    # ================= 카드 ③ 결과 =================
     if st.session_state.t1_res:
-        res = st.session_state.t1_res
-        safe_end = urllib.parse.quote(res["end_target"])
+        with st.container(border=True):
+            st.markdown("#### 🏁 결과")
+            res = st.session_state.t1_res
+            safe_end = urllib.parse.quote(res["end_target"])
 
-        k_dur, t_dur = res["k_dur"], res["t_dur"]
-        k_is_winner = k_dur is not None and (t_dur is None or k_dur < t_dur)
-        t_is_winner = t_dur is not None and (k_dur is None or t_dur < k_dur)
+            k_dur, t_dur = res["k_dur"], res["t_dur"]
+            k_is_winner = k_dur is not None and (t_dur is None or k_dur < t_dur)
+            t_is_winner = t_dur is not None and (k_dur is None or t_dur < k_dur)
 
-        rc1, rc2 = st.columns(2)
-        with rc1:
-            st.markdown(f"""
-            <div class="scoreboard-card {'is-winner' if k_is_winner else ''}">
-                <div><span class="provider-badge badge-k" style="background:#F5C518;">K</span><strong>카카오내비</strong>{' <span class="winner-pill">⚡ 더 빠름</span>' if k_is_winner else ''}</div>
-                <div class="scoreboard-time">{format_time(k_dur)}</div>
-                <div class="scoreboard-dist">{f"{res['k_dist']} km" if res["k_dist"] else "-"}</div>
-                <a href="https://map.kakao.com/link/to/{safe_end},{res['ey']},{res['ex']}" target="_blank" style="display:block; text-align:center; padding:10px; background:#FEE500; color:#000; text-decoration:none; border-radius:8px; font-weight:700;">🟡 카카오 앱 열기</a>
-            </div>
-            """, unsafe_allow_html=True)
-        with rc2:
-            st.markdown(f"""
-            <div class="scoreboard-card {'is-winner' if t_is_winner else ''}">
-                <div><span class="provider-badge" style="background:#EF4C35;">T</span><strong>티맵</strong>{' <span class="winner-pill">⚡ 더 빠름</span>' if t_is_winner else ''}</div>
-                <div class="scoreboard-time">{format_time(t_dur)}</div>
-                <div class="scoreboard-dist">{f"{res['t_dist']} km" if res["t_dist"] else "-"}</div>
-                <a href="tmap://route?goalname={safe_end}&goalx={res['ex']}&goaly={res['ey']}" style="display:block; text-align:center; padding:10px; background:#EF4C35; color:#FFF; text-decoration:none; border-radius:8px; font-weight:700;">🔴 티맵 앱 열기</a>
-            </div>
-            """, unsafe_allow_html=True)
+            rc1, rc2 = st.columns(2)
+            with rc1:
+                st.markdown(f"""
+                <div class="scoreboard-card {'is-winner' if k_is_winner else ''}">
+                    <div><span class="provider-badge badge-k" style="background:#F5C518;">K</span><strong>카카오내비</strong>{' <span class="winner-pill">⚡ 더 빠름</span>' if k_is_winner else ''}</div>
+                    <div class="scoreboard-time">{format_time(k_dur)}</div>
+                    <div class="scoreboard-dist">{f"{res['k_dist']} km" if res["k_dist"] else "-"}</div>
+                    <a href="https://map.kakao.com/link/to/{safe_end},{res['ey']},{res['ex']}" target="_blank" style="display:block; text-align:center; padding:10px; background:#FEE500; color:#000; text-decoration:none; border-radius:8px; font-weight:700;">🟡 카카오 앱 열기</a>
+                </div>
+                """, unsafe_allow_html=True)
+            with rc2:
+                st.markdown(f"""
+                <div class="scoreboard-card {'is-winner' if t_is_winner else ''}">
+                    <div><span class="provider-badge" style="background:#EF4C35;">T</span><strong>티맵</strong>{' <span class="winner-pill">⚡ 더 빠름</span>' if t_is_winner else ''}</div>
+                    <div class="scoreboard-time">{format_time(t_dur)}</div>
+                    <div class="scoreboard-dist">{f"{res['t_dist']} km" if res["t_dist"] else "-"}</div>
+                    <a href="tmap://route?goalname={safe_end}&goalx={res['ex']}&goaly={res['ey']}" style="display:block; text-align:center; padding:10px; background:#EF4C35; color:#FFF; text-decoration:none; border-radius:8px; font-weight:700;">🔴 티맵 앱 열기</a>
+                </div>
+                """, unsafe_allow_html=True)
 
-        wp_names = " → ".join(w[2].split(" (")[0] for w in res.get("waypoints", []))
-        st.caption(f"탐색 옵션: {res.get('route_option', '추천 경로')}" + (f" · 경유지: {wp_names}" if wp_names else ""))
-        
-        if st.button("🔄 지도 정위치로 되돌리기", key="reset_map_1", use_container_width=True):
-            st.session_state.map_key += 1
-            
-        map_c1, map_c2 = st.columns(2)
-        markers = [
-            {"coord": [res["sy"], res["sx"]], "color": "#1E90FF", "text": "S"},
-            {"coord": [res["ey"], res["ex"]], "color": "#FF0000", "text": "E"}
-        ]
-        for i, (wx, wy, _) in enumerate(res.get("waypoints", [])):
-            markers.append({"coord": [wy, wx], "color": "#8A2BE2", "text": f"경유{i+1}"})
-        
-        with map_c1:
-            st.caption("🗺️ 카카오내비 최적 경로 (순정 카카오맵)")
-            render_kakao_map(res["ey"], res["ex"], res["k_seg"], markers, map_key=st.session_state.map_key, height=400)
-        with map_c2:
-            st.caption("🗺️ 티맵 최적 경로 (순정 티맵)")
-            render_tmap(res["ey"], res["ex"], res["t_seg"], markers, map_key=st.session_state.map_key, height=400)
+            wp_names = " → ".join(w[2].split(" (")[0] for w in res.get("waypoints", []))
+            st.caption(f"탐색 옵션: {res.get('route_option', '추천 경로')}" + (f" · 경유지: {wp_names}" if wp_names else ""))
+
+            if st.button("🔄 지도 정위치로 되돌리기", key="reset_map_1", use_container_width=True):
+                st.session_state.map_key += 1
+
+            map_c1, map_c2 = st.columns(2)
+            markers = [
+                {"coord": [res["sy"], res["sx"]], "color": "#1E90FF", "text": "S"},
+                {"coord": [res["ey"], res["ex"]], "color": "#FF0000", "text": "E"}
+            ]
+            for i, (wx, wy, _) in enumerate(res.get("waypoints", [])):
+                markers.append({"coord": [wy, wx], "color": "#8A2BE2", "text": f"경유{i+1}"})
+
+            with map_c1:
+                st.caption("🗺️ 카카오내비 최적 경로 (순정 카카오맵)")
+                render_kakao_map(res["ey"], res["ex"], res["k_seg"], markers, map_key=st.session_state.map_key, height=400)
+            with map_c2:
+                st.caption("🗺️ 티맵 최적 경로 (순정 티맵)")
+                render_tmap(res["ey"], res["ex"], res["t_seg"], markers, map_key=st.session_state.map_key, height=400)
 
 # ------------------------------------------
 # 메뉴 2: 다중 출발지 승부
