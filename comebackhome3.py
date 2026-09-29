@@ -21,10 +21,10 @@ custom_css = """
     @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
 
     :root {
-        --bg-page: #10131a;
-        --bg-card: #1b1f2a;
-        --bg-card-hover: #232838;
-        --border-card: #2a2f3d;
+        --bg-page: #1b1e27;
+        --bg-card: #262a35;
+        --bg-card-hover: #2f3441;
+        --border-card: #383d4d;
         --text-main: #e8e9ed;
         --text-muted: #9aa0ad;
     }
@@ -117,15 +117,26 @@ custom_css = """
         height: 40px !important;
     }
     div.stButton > button[kind="primary"] {
-        background-color: #FEE500 !important; color: #191919 !important;
+        background-color: #FEE500 !important;
         font-weight: 800 !important;
         box-shadow: 0 4px 10px rgba(254,229,0,0.15) !important;
         border: none !important; transition: 0.2s;
     }
+    /* 전역 "p { color: var(--text-main) }" 규칙이 버튼 안쪽 <p>에도 직접 걸려서
+       버튼 자체의 색 지정보다 우선 적용되는 바람에 노란 배경에 흰 글씨로 보이던 문제.
+       버튼 안 <p>를 직접 지정해서 확실히 덮어씀 */
+    div.stButton > button[kind="primary"] p,
+    div.stButton > button[kind="primary"] div {
+        color: #191919 !important;
+    }
     div.stButton > button[kind="primary"]:hover { transform: translateY(-2px) !important; }
     div.stButton > button[kind="secondary"] {
-        background-color: var(--bg-card) !important; color: var(--text-main) !important;
+        background-color: var(--bg-card) !important;
         border: 1px solid var(--border-card) !important;
+    }
+    div.stButton > button[kind="secondary"] p,
+    div.stButton > button[kind="secondary"] div {
+        color: var(--text-main) !important;
     }
 
     .result-card {
@@ -185,14 +196,24 @@ def render_kakao_map(center_lat, center_lng, route_segments, markers, map_key=0,
         <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
         <style> 
             html, body {{ width: 100%; height: 100%; margin: 0; padding: 0; background-color:#f8f9fa; }} 
+            #mapWrap {{ position: relative; width: 100%; height: 100%; }}
             #map {{ width: 100%; height: 100%; display: none; }}
             #loading {{ width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; color: #888; font-size: 13px; text-align: center; line-height: 1.5; }}
+            #clickGuard {{
+                position: absolute; inset: 0; z-index: 10;
+                display: flex; align-items: center; justify-content: center;
+                background: rgba(0,0,0,0.12); color: #fff; font-size: 12px; font-weight: 600;
+                cursor: pointer; text-align: center; padding: 0 12px;
+            }}
         </style>
     </head>
     <body>
         <!-- Map Key: {map_key} -->
         <div id="loading">카카오 지도를 불러오는 중입니다...</div>
-        <div id="map"></div>
+        <div id="mapWrap">
+            <div id="map"></div>
+            <div id="clickGuard">🖱️ 클릭하면 지도를 움직일 수 있어요</div>
+        </div>
         <script>
             function initKakaoMap() {{
                 kakao.maps.load(function() {{
@@ -202,6 +223,12 @@ def render_kakao_map(center_lat, center_lng, route_segments, markers, map_key=0,
                     
                     var options = {{ center: new kakao.maps.LatLng({center_lat}, {center_lng}), level: 7 }};
                     var map = new kakao.maps.Map(container, options);
+                    map.setDraggable(false);
+                    var guard = document.getElementById('clickGuard');
+                    guard.addEventListener('click', function() {{
+                        map.setDraggable(true);
+                        guard.style.display = 'none';
+                    }});
                     var bounds = new kakao.maps.LatLngBounds();
                     var hasBounds = false;
                     
@@ -259,15 +286,34 @@ def render_tmap(center_lat, center_lng, route_segments, markers, map_key=0, heig
         <meta charset="utf-8">
         <!-- 🌟 티맵에도 혹시 모를 차단을 막기 위해 동일한 보안 태그를 추가했습니다. -->
         <meta http-equiv="Content-Security-Policy" content="upgrade-insecure-requests">
-        <style> html, body {{ width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; }} #map {{ width: 100%; height: 100%; }} </style>
+        <style>
+            html, body {{ width: 100%; height: 100%; margin: 0; padding: 0; overflow: hidden; }}
+            #mapWrap {{ position: relative; width: 100%; height: 100%; }}
+            #map {{ width: 100%; height: 100%; }}
+            #clickGuard {{
+                position: absolute; inset: 0; z-index: 10;
+                display: flex; align-items: center; justify-content: center;
+                background: rgba(0,0,0,0.12); color: #fff; font-size: 12px; font-weight: 600;
+                cursor: pointer; text-align: center; padding: 0 12px;
+            }}
+        </style>
         <script src="https://apis.openapi.sk.com/tmap/jsv2?version=1&appKey={TMAP_APP_KEY}"></script>
     </head>
     <body onload="initTmap()">
         <!-- Map Key: {map_key} -->
-        <div id="map" style="width:100%; height:100%;"></div>
+        <div id="mapWrap">
+            <div id="map" style="width:100%; height:100%;"></div>
+            <div id="clickGuard">🖱️ 클릭하면 지도를 움직일 수 있어요</div>
+        </div>
         <script>
             function initTmap() {{
                 var map = new Tmapv2.Map("map", {{ center: new Tmapv2.LatLng({center_lat}, {center_lng}), zoom: 11 }});
+                try {{ map.setDraggable(false); }} catch (e) {{ /* SDK 버전에 따라 메서드가 없을 수 있음 */ }}
+                var guard = document.getElementById('clickGuard');
+                guard.addEventListener('click', function() {{
+                    try {{ map.setDraggable(true); }} catch (e) {{}}
+                    guard.style.display = 'none';
+                }});
                 var bounds = new Tmapv2.LatLngBounds();
                 var hasBounds = false;
                 
