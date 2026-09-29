@@ -57,6 +57,25 @@ custom_css = """
     .rank-badge {
         color: white; padding: 4px 10px; border-radius: 20px; font-weight: 800; font-size: 12px; margin-right: 5px;
     }
+
+    /* 🏆 4사 비교 스코어보드에서 아이디어를 가져온 결과 카드 스타일 */
+    .scoreboard-card {
+        background: #ffffff; border: 2px solid #eaeaea; border-radius: 14px;
+        padding: 16px; text-align: center; position: relative;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05); transition: 0.2s;
+    }
+    .scoreboard-card.is-winner { border-color: #22C55E; box-shadow: 0 4px 15px rgba(34,197,94,0.15); }
+    .provider-badge {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 22px; height: 22px; border-radius: 6px; color: white;
+        font-size: 12px; font-weight: 800; margin-right: 6px;
+    }
+    .winner-pill {
+        background: #22C55E; color: white; font-size: 11px; font-weight: 800;
+        border-radius: 12px; padding: 2px 9px; margin-left: 6px;
+    }
+    .scoreboard-time { font-size: 26px; font-weight: 800; color: #111; margin: 4px 0 2px 0; }
+    .scoreboard-dist { font-size: 13px; color: #777; margin-bottom: 10px; }
 </style>
 """
 st.markdown(custom_css, unsafe_allow_html=True)
@@ -298,6 +317,47 @@ def format_time(mins):
     h, m = mins // 60, mins % 60
     return f"{h}시간 {m}분" if h > 0 else f"{m}분"
 
+# ==========================================
+# 💾 경로 프리셋 저장/불러오기
+# (같은 서버 인스턴스 안에서는 유지되지만, Streamlit Cloud 재배포 시 초기화될 수 있음)
+# ==========================================
+PRESET_FILE = "route_presets.json"
+
+def load_presets():
+    if os.path.exists(PRESET_FILE):
+        try:
+            with open(PRESET_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            return []
+    return []
+
+def save_presets(presets):
+    try:
+        with open(PRESET_FILE, "w", encoding="utf-8") as f:
+            json.dump(presets, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+def apply_preset_to_session(preset):
+    """저장된 프리셋 값을 address_picker가 쓰는 session_state 키에 직접 주입"""
+    def set_addr(key, label, x, y):
+        st.session_state[f"{key}_query"] = label
+        st.session_state[f"{key}_prev_query"] = label
+        st.session_state[f"{key}_candidates"] = [{"label": label, "x": x, "y": y}]
+        st.session_state[f"{key}_pick"] = label
+
+    set_addr("t1_start", preset["start_label"], preset["start_x"], preset["start_y"])
+    set_addr("t1_end", preset["end_label"], preset["end_x"], preset["end_y"])
+
+    waypoints = preset.get("waypoints", [])
+    st.session_state.t1_wp_count = len(waypoints)
+    for i, wp in enumerate(waypoints):
+        set_addr(f"t1_wp{i}", wp["label"], wp["x"], wp["y"])
+
+    if preset.get("route_option"):
+        st.session_state.t1_route_option = preset["route_option"]
+
 def address_picker(label, key, default_query=""):
     """
     주소를 입력받아 검색하고, 검색 결과 후보 중 사용자가 직접 선택하게 하는 UI.
@@ -392,9 +452,6 @@ st.markdown("---")
 # ------------------------------------------
 # 메뉴 1: 1:1 실시간 경로
 # ------------------------------------------
-# ------------------------------------------
-# 메뉴 1: 1:1 실시간 경로
-# ------------------------------------------
 if menu_selection == "🗺️ 1:1 실시간 경로":
     route_choice1 = st.radio("🚗 조회할 경로 선택", ["1️⃣ 출근길 (집 ➔ 회사)", "2️⃣ 퇴근길 (회사 ➔ 집)", "3️⃣ 직접 설정"], index=0 if kst_now.hour < 12 else 1, horizontal=True, key="r1")
 
@@ -454,6 +511,49 @@ if menu_selection == "🗺️ 1:1 실시간 경로":
     else:
         st.warning("출발지와 도착지를 검색해서 선택해주세요.")
 
+    # --- 💾 경로 프리셋 저장/불러오기 ---
+    with st.expander("💾 자주 쓰는 경로 프리셋"):
+        presets = load_presets()
+        if presets:
+            preset_names = [p["name"] for p in presets]
+            pcol1, pcol2, pcol3 = st.columns([3, 1, 1])
+            with pcol1:
+                selected_preset_name = st.selectbox("저장된 프리셋", preset_names, key="t1_preset_select", label_visibility="collapsed")
+            with pcol2:
+                if st.button("📂 불러오기", key="t1_preset_load", use_container_width=True):
+                    preset = next(p for p in presets if p["name"] == selected_preset_name)
+                    apply_preset_to_session(preset)
+                    st.rerun()
+            with pcol3:
+                if st.button("🗑️ 삭제", key="t1_preset_delete", use_container_width=True):
+                    save_presets([p for p in presets if p["name"] != selected_preset_name])
+                    st.rerun()
+        else:
+            st.caption("아직 저장된 프리셋이 없어요.")
+
+        st.markdown("&nbsp;", unsafe_allow_html=True)
+        ncol1, ncol2 = st.columns([3, 1])
+        with ncol1:
+            new_preset_name = st.text_input("새 프리셋 이름", placeholder="예: 주말 처가댁", key="t1_preset_new_name", label_visibility="collapsed")
+        with ncol2:
+            if st.button("💾 저장", key="t1_preset_save", use_container_width=True):
+                if not new_preset_name.strip():
+                    st.warning("프리셋 이름을 입력해주세요.")
+                elif not (sx and ex):
+                    st.warning("출발지와 도착지를 먼저 설정해주세요.")
+                else:
+                    new_preset = {
+                        "name": new_preset_name.strip(),
+                        "start_label": start_label, "start_x": sx, "start_y": sy,
+                        "end_label": end_label, "end_x": ex, "end_y": ey,
+                        "waypoints": [{"label": w[2], "x": w[0], "y": w[1]} for w in waypoints1],
+                        "route_option": route_option1,
+                    }
+                    presets = [p for p in presets if p["name"] != new_preset["name"]] + [new_preset]
+                    save_presets(presets)
+                    st.success(f"'{new_preset['name']}' 프리셋으로 저장했어요.")
+        st.caption("⚠️ 이 서버가 재배포되면 프리셋이 초기화될 수 있어요.")
+
     # 출발지/도착지/경유지/경로옵션 중 하나라도 바뀌면 자동으로 재탐색
     current_sig = (sx, sy, ex, ey, tuple((w[0], w[1]) for w in waypoints1), route_option1)
     auto_trigger = bool(sx and ex) and st.session_state.get("t1_last_sig") != current_sig
@@ -481,14 +581,32 @@ if menu_selection == "🗺️ 1:1 실시간 경로":
 
     if st.session_state.t1_res:
         res = st.session_state.t1_res
-        st.markdown('<div class="result-card">', unsafe_allow_html=True)
-        rc1, rc2 = st.columns(2)
         safe_end = urllib.parse.quote(res["end_target"])
-        rc1.metric("🟡 카카오내비", format_time(res["k_dur"]), f"{res['k_dist']} km" if res["k_dist"] else "")
-        rc1.markdown(f'<a href="https://map.kakao.com/link/to/{safe_end},{res["ey"]},{res["ex"]}" target="_blank" style="display:block; text-align:center; padding:10px; background:#FEE500; color:#000; text-decoration:none; border-radius:8px; font-weight:700;">🟡 카카오 앱 열기</a>', unsafe_allow_html=True)
-        rc2.metric("🔴 티맵", format_time(res["t_dur"]), f"{res['t_dist']} km" if res["t_dist"] else "")
-        rc2.markdown(f'<a href="tmap://route?goalname={safe_end}&goalx={res["ex"]}&goaly={res["ey"]}" style="display:block; text-align:center; padding:10px; background:#EF4C35; color:#FFF; text-decoration:none; border-radius:8px; font-weight:700;">🔴 티맵 앱 열기</a>', unsafe_allow_html=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+
+        k_dur, t_dur = res["k_dur"], res["t_dur"]
+        k_is_winner = k_dur is not None and (t_dur is None or k_dur < t_dur)
+        t_is_winner = t_dur is not None and (k_dur is None or t_dur < k_dur)
+
+        rc1, rc2 = st.columns(2)
+        with rc1:
+            st.markdown(f"""
+            <div class="scoreboard-card {'is-winner' if k_is_winner else ''}">
+                <div><span class="provider-badge" style="background:#F5C518;">K</span><strong>카카오내비</strong>{' <span class="winner-pill">⚡ 더 빠름</span>' if k_is_winner else ''}</div>
+                <div class="scoreboard-time">{format_time(k_dur)}</div>
+                <div class="scoreboard-dist">{f"{res['k_dist']} km" if res["k_dist"] else "-"}</div>
+                <a href="https://map.kakao.com/link/to/{safe_end},{res['ey']},{res['ex']}" target="_blank" style="display:block; text-align:center; padding:10px; background:#FEE500; color:#000; text-decoration:none; border-radius:8px; font-weight:700;">🟡 카카오 앱 열기</a>
+            </div>
+            """, unsafe_allow_html=True)
+        with rc2:
+            st.markdown(f"""
+            <div class="scoreboard-card {'is-winner' if t_is_winner else ''}">
+                <div><span class="provider-badge" style="background:#EF4C35;">T</span><strong>티맵</strong>{' <span class="winner-pill">⚡ 더 빠름</span>' if t_is_winner else ''}</div>
+                <div class="scoreboard-time">{format_time(t_dur)}</div>
+                <div class="scoreboard-dist">{f"{res['t_dist']} km" if res["t_dist"] else "-"}</div>
+                <a href="tmap://route?goalname={safe_end}&goalx={res['ex']}&goaly={res['ey']}" style="display:block; text-align:center; padding:10px; background:#EF4C35; color:#FFF; text-decoration:none; border-radius:8px; font-weight:700;">🔴 티맵 앱 열기</a>
+            </div>
+            """, unsafe_allow_html=True)
+
         wp_names = " → ".join(w[2].split(" (")[0] for w in res.get("waypoints", []))
         st.caption(f"탐색 옵션: {res.get('route_option', '추천 경로')}" + (f" · 경유지: {wp_names}" if wp_names else ""))
         
